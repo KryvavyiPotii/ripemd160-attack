@@ -192,16 +192,23 @@ pub struct AttackConfig {
 }
 
 impl AttackConfig {
-    pub fn build(args: &[String]) -> Result<Self, &'static str> {
-        if args.len() != 3 {
-            return Err("Incorrect arguments passed");
-        }
-
+   pub fn build(mut args: impl Iterator<Item = String>)
+        -> Result<Self, &'static str> {
         let mut hasher = Ripemd160::new();
-        let attack_type = AttackType::build(&args[1])?;
-        let message_modification_variant = MessageModificationVariant::build(
-            &args[2]
-        )?;
+
+        // Skip executable path.
+        args.next();
+
+        let attack_type = match args.next() {
+            Some(arg) => AttackType::build(&arg)?,
+            None => return Err("Failed to get attack type"),
+        };
+
+        let message_modification_variant = match args.next() {
+            Some(arg) => MessageModificationVariant::build(&arg)?,
+            None => return Err("Failed to get message modification variant"),
+        };
+            
         let message = match attack_type {
             AttackType::FindPreimage => MESSAGE1.to_string(),
             AttackType::Birthdays => MESSAGE2.to_string(),
