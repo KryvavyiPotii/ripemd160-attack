@@ -1,10 +1,11 @@
 [package]
-name = "pr1"
-version = "0.1.0"
+name = "ripemd160-attack"
+version = "0.2.0"
 edition = "2021"
 
 [dependencies]
+ctrlc-async = "3.2.2"
+clap = "4.5.21"
 rand = "0.8.5"
 ripemd = "0.1.3"
 generic-array = "0.14.7"
-ctrlc-async = "3.2.2"
