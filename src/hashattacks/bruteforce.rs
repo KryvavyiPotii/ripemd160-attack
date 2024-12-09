@@ -1,54 +1,51 @@
 use std::sync::{Arc, atomic::{AtomicBool, Ordering}};
 
-use super::{AttackResult, AttackState, HashAttack};
 use crate::messagehash::HashValue;
 
-
-const NUMBER_OF_VERBOSE_TRIES: u64 = 30;
-const PROBABILITY: f32 = 0.95;
-const TRUNCATED_HASH_SIZE_IN_BITS: usize = 16;
-const TRUNCATED_HASH_SIZE_IN_BYTES: usize = TRUNCATED_HASH_SIZE_IN_BITS / 8;
-const HASH_COUNT: u64 = 1 << TRUNCATED_HASH_SIZE_IN_BITS;
-
-
-fn min_probability_from_tries(tries: u64) -> f32 {
-    1.0 + (-(tries as f32) / HASH_COUNT as f32).exp()
-}
-
-fn tries_from_probability(probability: f32) -> u64 {
-    (HASH_COUNT as f32 * (1.0 / (1.0 - probability)).ln())
-        .ceil() as u64
-}
-
-fn equal_hashes(
-    hash1: &HashValue,
-    hash2: &HashValue,
-    prefix_len_in_bytes: usize
-) -> bool {
-    if hash1.len() != hash2.len() {
-        return false;
-    }
-
-    let hash_len = hash1.len();
-
-    let prefix_index = if hash_len >= prefix_len_in_bytes {
-        hash_len - prefix_len_in_bytes
-    }
-    else {
-        0
-    };
-
-    hash1[prefix_index..] == hash2[prefix_index..] 
-}
+use super::{AttackResult, AttackState, HashAttack};
 
 
 pub struct BruteForce {
     state: AttackState,
+    hash_size_in_bytes: usize,
+    success_probability: f32,
+    verbose_tries_number: u64
 }
 
 impl BruteForce {
-    pub fn new(initial_state: AttackState) -> Self  {
-        Self { state: initial_state }
+    pub fn build(
+        initial_state: AttackState,
+        hash_size_in_bytes: usize,
+        success_probability: f32,
+        verbose_tries_number: u64
+    ) -> Result<Self, &'static str> {
+        if hash_size_in_bytes > HashValue::len() {
+            return Err("Invalid hash size");
+        }
+
+        Ok(
+            Self { 
+                state: initial_state,
+                hash_size_in_bytes,
+                success_probability,
+                verbose_tries_number
+            }
+        )
+    }
+
+    fn min_probability_from_tries(&self, tries: u64) -> f32 {
+        let hash_size_in_bits = self.hash_size_in_bytes * 8; 
+        let hash_count = 1 << hash_size_in_bits;
+
+        1.0 + (-(tries as f32) / hash_count as f32).exp()
+    }
+
+    fn tries_from_probability(&self) -> u64 {
+        let hash_size_in_bits = self.hash_size_in_bytes * 8; 
+        let hash_count: u64 = 1 << hash_size_in_bits;
+        let probability = self.success_probability;
+        
+        hash_count * (1.0 / (1.0 - probability)).ln().ceil() as u64
     }
 }
 
@@ -57,22 +54,21 @@ impl HashAttack for BruteForce {
         let original_messagehash = self.state.messagehash();
 
         println!(
-            "Initialising preimage search attack...\n{}\n",
+            "[INFO] Initialising brute-force attack...\n{}\n",
             original_messagehash
         );
-        println!("Searching a preimage...");
+        println!("[INFO] Searching for a preimage...");
         
-        let mut i = 1;
+        let mut i: u64 = 1;
 
-        while i <= NUMBER_OF_VERBOSE_TRIES && running.load(Ordering::SeqCst) {
+        while i <= self.verbose_tries_number && running.load(Ordering::SeqCst) {
             let messagehash = self.state.update();
             
             println!("{}\t{}", i, messagehash);
 
-            if equal_hashes(
-                original_messagehash.hash_value(),
+            if original_messagehash.hash_value().equal_to(
                 messagehash.hash_value(),
-                TRUNCATED_HASH_SIZE_IN_BYTES
+                self.hash_size_in_bytes
             ) {
                 println!(
                     "[SUCCESS] Found preimage on iteration {}!\n{}\n{}\n",
@@ -89,15 +85,14 @@ impl HashAttack for BruteForce {
 
         println!("...\n");
 
-        let tries_num = tries_from_probability(PROBABILITY);
+        let tries_num = self.tries_from_probability();
 
         while i <= tries_num && running.load(Ordering::SeqCst) {
             let messagehash = self.state.update();
             
-            if equal_hashes(
-                original_messagehash.hash_value(),
+            if original_messagehash.hash_value().equal_to(
                 messagehash.hash_value(),
-                TRUNCATED_HASH_SIZE_IN_BYTES
+                self.hash_size_in_bytes
             ) {
                 println!(
                     "[SUCCESS] Found preimage on iteration {}!\n{}\n{}\n",
