@@ -1,6 +1,6 @@
 use rand::{thread_rng, Rng, seq::SliceRandom};
 
-use super::HASH_COUNT;
+use crate::messagehash::HashValue;
 
 
 fn append_number_to_message(message: &str, num: u64) -> String {
@@ -8,7 +8,7 @@ fn append_number_to_message(message: &str, num: u64) -> String {
 }
 
 fn append_random_number_to_message(message: &str) -> String { 
-    let rand_num: u64 = thread_rng().gen_range(1..HASH_COUNT);
+    let rand_num: u64 = thread_rng().gen_range(1..(HashValue::len() as u64));
 
     format!("{message}{rand_num}")
 }
@@ -31,7 +31,7 @@ fn generate_random_ascii() -> String {
         .to_string()
 }
 
-fn mutate(character: char) -> String {
+fn swap_similar(character: char) -> String {
     let default = "*";
     let mut rng = thread_rng();
 
@@ -76,12 +76,12 @@ fn transform_message_randomly(message: &str) -> String {
     message
         .chars()
         .map(|c| {
-            let transform_type: u32 = rng.gen_range(0..=3);
+            let mutation_type: u32 = rng.gen_range(0..=3);
 
-            match transform_type {
+            match mutation_type {
                 0 => switch_case(c),
                 1 => generate_random_ascii(),
-                2 => mutate(c),
+                2 => swap_similar(c),
                 _ => c.to_string(),
             }
         })
