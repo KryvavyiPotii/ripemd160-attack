@@ -1,14 +1,13 @@
 use rand::{thread_rng, Rng, seq::SliceRandom};
 
-use crate::messagehash::HashValue;
-
 
 fn append_number_to_message(message: &str, num: u64) -> String {
     format!("{message}{num}")
 }
 
-fn append_random_number_to_message(message: &str) -> String { 
-    let rand_num: u64 = thread_rng().gen_range(1..(HashValue::len() as u64));
+fn append_random_number_to_message(message: &str) -> String {
+    let maximum_number: u128 = 1 << 100;
+    let rand_num: u128 = thread_rng().gen_range(1..maximum_number);
 
     format!("{message}{rand_num}")
 }
