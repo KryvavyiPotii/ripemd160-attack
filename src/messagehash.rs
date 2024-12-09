@@ -4,16 +4,26 @@ use std::{
 };
 
 use generic_array::GenericArray;
-use ripemd::{Digest, Ripemd160, Ripemd160Core, digest::OutputSizeUser};
+use ripemd::{Ripemd160Core, digest::OutputSizeUser};
 
 
-pub const HASH_SIZE_IN_BYTES: usize = 20;
+const HASH_SIZE_IN_BYTES: usize = 20;
 
 
-pub type HashArray = GenericArray<
+type HashArray = GenericArray<
     u8,
     <Ripemd160Core as OutputSizeUser>::OutputSize
 >;
+
+
+fn get_suffix_index(hash_len: usize, suffix_len_in_bytes: usize) -> usize {
+    if hash_len > suffix_len_in_bytes {
+        hash_len - suffix_len_in_bytes
+    }
+    else {
+        0
+    }
+}
 
 
 #[derive(Clone, Debug)]
@@ -26,8 +36,17 @@ impl HashValue {
         Self { hash }
     }
     
-    pub fn len(&self) -> usize {
+    pub fn len() -> usize {
         Ripemd160Core::output_size()
+    }
+
+    pub fn equal_to(&self, other: &Self, suffix_len_in_bytes: usize) -> bool {
+        let hash_size = Self::len();
+
+        let suffix_index1 = get_suffix_index(hash_size, suffix_len_in_bytes);
+        let suffix_index2 = get_suffix_index(hash_size, suffix_len_in_bytes);
+
+        self[suffix_index1..] == other[suffix_index2..] 
     }
 }
 
@@ -91,6 +110,7 @@ impl Index<RangeTo<usize>> for HashValue {
     }
 }
 
+
 #[derive(Clone, Debug)]
 pub struct MessageHash {
     message: String,
@@ -105,32 +125,31 @@ impl MessageHash {
         }
     }
 
-    pub fn hash_message(hasher: &mut Ripemd160, message: &str) -> Self {
-        let message = message.to_string();
-
-        hasher.update(&message);
-
-        Self {
-            message,
-            hash: HashValue::new(hasher.finalize_reset()),
-        }
-    }
-
     pub fn hash_value(&self) -> &HashValue {
         &self.hash
-    }
-
-    pub fn hash_len(&self) -> usize {
-        self.hash.len()
     }
 
     pub fn message(&self) -> String {
         self.message.clone()
     }
+
+    pub fn collides_with(
+        &self,
+        other: &Self,
+        suffix_len_in_bytes: usize
+    ) -> bool {
+        let different_messages = self.message != other.message;
+        let equal_hashes = self.hash.equal_to(
+            &other.hash,
+            suffix_len_in_bytes
+        );
+
+        different_messages && equal_hashes
+    }
 }
 
 impl fmt::Display for MessageHash {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}\t{:x}", self.message, self.hash)
+        write!(f, "{:x}\t{}", self.hash, self.message)
     }
 }
