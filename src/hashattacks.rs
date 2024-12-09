@@ -3,6 +3,7 @@ use std::{
     time
 };
 
+use chrono::prelude::*;
 use ripemd::{Digest, Ripemd160};
 
 use crate::messagehash::{HashValue, MessageHash};
@@ -15,8 +16,6 @@ pub mod hellman;
 pub mod messagetransform;
 
 
-const HASH_COUNT: u64 = 1 << 32;
-
 pub trait HashAttack {
     fn attack(&mut self, running: Arc<AtomicBool>) -> AttackResult;
     
@@ -28,12 +27,16 @@ pub trait HashAttack {
             r.store(false, Ordering::SeqCst);
         }).expect("Error setting Ctrl-C handler");
 
+        let mut utc: DateTime<Utc> = Utc::now();
+        println!("[TIME] Attack began at {}", utc);
         let now = time::Instant::now();
-        
+
         let result = self.attack(running);
 
         let elapsed_time = now.elapsed();
 
+        utc = Utc::now();
+        println!("[TIME] Attack finished at {}", utc);
         println!("[TIME] Attack took {:.2?}", elapsed_time);
 
         result
