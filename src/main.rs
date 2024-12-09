@@ -30,7 +30,7 @@ const TRANSFORM_MUTATE: &str             = "mutate";
 
 fn main() {
     let matches = Command::new("ripemd160-attack")
-        .version("0.2.0")
+        .version("0.3.1")
         .about("Executes various attacks on RIPEMD160 hash.")
         .arg(
             Arg::new("message")
