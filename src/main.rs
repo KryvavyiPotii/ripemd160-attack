@@ -15,7 +15,8 @@ const DEFAULT_SUCCESS_PROBABILITY: f32 = 0.95;
 const DEFAULT_HASH_SIZE_IN_BYTES: usize = 2;
 
 const DEFAULT_HELLMAN_REDUNDANCY_OUTPUT_SIZE_IN_BYTES: usize = 16;
-const DEFAULT_HELLMAN_TABLE_NUMBER: u32 = 1;
+const DEFAULT_HELLMAN_TABLE_NUMBER: usize = 1;
+const DEFAULT_HELLMAN_STORED_TABLE_NUMBER: usize = 0;
 const DEFAULT_HELLMAN_VARIABLE_NUMBER: u32 = 1 << 14;
 const DEFAULT_HELLMAN_ITERATION_COUNT: u32 = 1 << 7;
 
@@ -30,7 +31,7 @@ const TRANSFORM_MUTATE: &str             = "mutate";
 
 fn main() {
     let matches = Command::new("ripemd160-attack")
-        .version("0.3.1")
+        .version("0.4.0")
         .about("Executes various attacks on RIPEMD160 hash.")
         .arg(
             Arg::new("message")
@@ -91,8 +92,14 @@ fn main() {
                 .arg(
                     Arg::new("hellman table number")
                         .long("tables")
-                        .value_parser(clap::value_parser!(u32))
+                        .value_parser(clap::value_parser!(usize))
                         .help("Number of tables.")
+                )
+                .arg(
+                    Arg::new("hellman stored table number")
+                        .long("stored-tables")
+                        .value_parser(clap::value_parser!(usize))
+                        .help("Number of tables written to disk.")
                 )
                 .arg(
                     Arg::new("hellman table variable number")
@@ -167,8 +174,11 @@ fn main() {
                 .get_one::<usize>("redundancy output size")
                 .unwrap_or(&DEFAULT_HELLMAN_REDUNDANCY_OUTPUT_SIZE_IN_BYTES);
             let table_number = sub_m
-                .get_one::<u32>("hellman table number")
+                .get_one::<usize>("hellman table number")
                 .unwrap_or(&DEFAULT_HELLMAN_TABLE_NUMBER);
+            let stored_table_number = sub_m
+                .get_one::<usize>("hellman stored table number")
+                .unwrap_or(&DEFAULT_HELLMAN_STORED_TABLE_NUMBER);
             let variable_number = sub_m
                 .get_one::<u32>("hellman table variable number")
                 .unwrap_or(&DEFAULT_HELLMAN_VARIABLE_NUMBER);
@@ -181,6 +191,7 @@ fn main() {
                 *hash_size,
                 *redundancy_output_size,
                 *table_number,
+                *stored_table_number,
                 *variable_number,
                 *iteration_count
             )
