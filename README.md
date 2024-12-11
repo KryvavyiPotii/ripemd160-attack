@@ -1,6 +1,6 @@
 # ripemd160-attack
 
-A simple CLI application that executes preimage search and birthdays attack on a part of RIPEMD-160 hash.
+A simple CLI application that executes brute-force, birthdays and Hellman's attacks on RIPEMD-160 hash.
 
 ## Usage
 
