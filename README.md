@@ -70,11 +70,12 @@ Executes Hellman's attack.
 Usage: ripemd160-attack hellman [OPTIONS]
 
 Options:
-      --rsize <redundancy output size>         Redundancy function output size in bytes.
-      --tables <hellman table number>          Number of tables.
-      --vars <hellman table variable number>   Number of table variables.
-      --iters <hellman table iteration count>  Number of table iterations.
-  -h, --help                                   Print help
+      --rsize <redundancy output size>               Redundancy function output size in bytes.
+      --tables <hellman table number>                Number of tables.
+      --stored-tables <hellman stored table number>  Number of tables written to disk.
+      --vars <hellman table variable number>         Number of table variables.
+      --iters <hellman table iteration count>        Number of table iterations.
+  -h, --help                                         Print help
 ```
 
 ## Extra
