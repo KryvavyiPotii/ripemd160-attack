@@ -1,19 +1,91 @@
-use std::sync::{atomic::{AtomicBool, Ordering}, Arc};
+use std::{
+    fs,
+    sync::{Arc, atomic::{AtomicBool, Ordering}},
+};
 
 use rand::prelude::*;
+use serde::{Serialize, Deserialize};
 
-use crate::messagehash::{HashValue, MessageHash};
+use crate::messagehash::HashValue;
 
 use super::{AttackResult, AttackState, HashAttack};
+
+
+const TABLES_DIRECTORY_PATH: &str = "tables";
+
+
+// TODO change to a macros
+fn table_filepath(index: usize) -> String {
+    format!("{TABLES_DIRECTORY_PATH}/table_{index}")
+}
+
+fn bytes_to_string(bytes: &Vec<u8>) -> String {
+    bytes
+        .iter()
+        .map(|byte| format!("{:02x}", byte))
+        .collect()
+}
+
+
+#[derive(Debug, Deserialize, Serialize, Clone)]
+struct TableEntry {
+    first_value: Vec<u8>,
+    last_value: Vec<u8>
+}
+
+impl TableEntry { 
+    fn new(first_value: Vec<u8>, last_value: Vec<u8>) -> Self {
+        Self { first_value, last_value }
+    }
+}
+
+
+#[derive(Debug, Deserialize, Serialize)]
+struct Table {
+    entries: Vec<TableEntry>,
+    prefix: Vec<u8>
+}
+
+impl Table {
+    fn new(entries: Vec<TableEntry>, prefix: Vec<u8>) -> Self {
+        Self { entries, prefix }
+    }
+
+    fn read_table(filepath: &str) -> std::io::Result<Self> {
+        let json: String = fs::read_to_string(filepath)?;
+        
+        let table: Table = serde_json::from_str(&json).unwrap();
+
+        Ok(table)
+    }
+
+    fn push(&mut self, entry: TableEntry) {
+        self.entries.push(entry);
+    }
+
+    fn iter(&self) -> std::slice::Iter<TableEntry> {
+        self.entries.iter()
+    }
+
+    fn store_table(&self, filepath: &str) -> std::io::Result<()> {
+        let json = serde_json::to_string(self).unwrap();
+
+        fs::write(filepath, json)?;
+
+        Ok(())
+    }
+}
 
 
 pub struct Hellman {
     state: AttackState,
     hash_size_in_bytes: usize,
     redundancy_prefix_size_in_bytes: usize,
-    tables_num: u32,
+    tables_number: usize,
+    stored_tables_number: usize,
     variable_number: u32,
     iteration_count: u32,
+    values: Vec<Vec<u8>>
 }
 
 impl Hellman {
@@ -21,7 +93,8 @@ impl Hellman {
         initial_state: AttackState,
         hash_size_in_bytes: usize,
         redundancy_output_size_in_bytes: usize,
-        tables_num: u32,
+        tables_number: usize,
+        stored_tables_number: usize,
         variable_number: u32,
         iteration_count: u32
     ) -> Result<Self, &'static str> {
@@ -31,20 +104,33 @@ impl Hellman {
         if redundancy_output_size_in_bytes <= hash_size_in_bytes {
             return Err("Invalid redundancy output size");
         }
+        if tables_number == 0 {
+            return Err("Invalid number of tables");
+        }
+        if stored_tables_number > tables_number {
+            return Err("Invalid number of stored tables");
+        }
 
         let redundancy_prefix_size_in_bytes =
             redundancy_output_size_in_bytes - hash_size_in_bytes; 
+        let values: Vec<Vec<u8>> = Vec::new();
 
-        Ok(
-            Self {
-                state: initial_state,
-                hash_size_in_bytes,
-                redundancy_prefix_size_in_bytes,
-                tables_num,
-                variable_number,
-                iteration_count
-            }
-        )
+        let mut hellman = Self {
+            state: initial_state,
+            hash_size_in_bytes,
+            redundancy_prefix_size_in_bytes,
+            tables_number,
+            stored_tables_number,
+            variable_number,
+            iteration_count,
+            values
+        };
+        
+        let messagehash = hellman.state.messagehash();
+        let hash = hellman.truncate_hash(messagehash.hash_value()); 
+        hellman.values = vec![hash.clone(); hellman.tables_number];
+
+        Ok(hellman)
     }
     
     fn truncate_hash(&self, hash_value: &HashValue) -> Vec<u8> {
@@ -53,10 +139,10 @@ impl Hellman {
         hash_value[prefix_size..].to_vec()
     }   
     
-    fn generate_redundancy_prefix(&self) -> Vec<u8> {
+    fn generate_random_byte_vector(&self, size: usize) -> Vec<u8> {
         let mut rng = thread_rng();
         
-        (0..self.redundancy_prefix_size_in_bytes)
+        (0..size)
             .map(|_| rng.gen())
             .collect()
     }
@@ -65,23 +151,13 @@ impl Hellman {
         &self,
         hash: &Vec<u8>,
         prefix: &Vec<u8>
-    ) -> Result<Vec<u8>, &'static str> {
-        let hash_len = hash.len();
-        let prefix_len = prefix.len();
-
-        if hash_len != self.hash_size_in_bytes {
-            return Err("Invalid hash size");
-        }
-        if prefix_len != self.redundancy_prefix_size_in_bytes {
-            return Err("Invalid redundancy prefix size");
-        }
-
-        let mut result = Vec::with_capacity(hash_len + prefix_len);
+    ) -> Vec<u8> {
+        let mut redundant_value = Vec::with_capacity(hash.len() + prefix.len());
         
-        result.extend_from_slice(prefix);
-        result.extend_from_slice(hash);
+        redundant_value.extend_from_slice(prefix);
+        redundant_value.extend_from_slice(hash);
 
-        Ok(result)
+        redundant_value
     }
     
     fn calculate_last_value(
@@ -89,34 +165,27 @@ impl Hellman {
         iteration_count: u32,
         first_value: &Vec<u8>,
         prefix: &Vec<u8>
-    ) -> Result<Vec<u8>, &'static str> {
-        if first_value.len() != self.hash_size_in_bytes {
-            return Err("Invalid first value size");
-        }
-        if prefix.len() != self.redundancy_prefix_size_in_bytes {
-            return Err("Invalid redundancy prefix size");
-        }
-        
+    ) -> Vec<u8> {
         let mut last_value = first_value.clone();
 
         for _ in 1..=iteration_count {
-            let redundant_value = self.redundancy_function(&last_value, prefix)
-                .unwrap();
+            let redundant_value = self.redundancy_function(&last_value, prefix);
             let hash = &self.state.hash_message(&redundant_value);
 
             last_value = self.truncate_hash(&hash);
         }
 
-        Ok(last_value)
+        last_value
     }
 
     fn create_preprocessing_table(
         &mut self, 
         running: &Arc<AtomicBool>
-    ) -> (Vec<(Vec<u8>, Vec<u8>)>, Vec<u8>) {
-        let mut table = Vec::new();
-        let mut rng = thread_rng(); 
-        let prefix = self.generate_redundancy_prefix();
+    ) -> Table {
+        let prefix = self.generate_random_byte_vector(
+            self.redundancy_prefix_size_in_bytes
+        );
+        let mut table = Table::new(Vec::new(), prefix);
 
         for i in 1..=self.variable_number {
             if !running.load(Ordering::SeqCst) {
@@ -127,36 +196,52 @@ impl Hellman {
                 break;
             }
             
-            let first_value: Vec<u8> = (0..self.hash_size_in_bytes)
-                .map(|_| rng.gen())
-                .collect();
+            let first_value = self.generate_random_byte_vector(
+                self.hash_size_in_bytes
+            );
             let last_value = self.calculate_last_value(
                 self.iteration_count,
                 &first_value, 
-                &prefix
-            ).expect("Failed to calculate the last value");
+                &table.prefix
+            );
 
-            table.push((first_value, last_value));
+            let entry = TableEntry::new(first_value, last_value);
+
+            table.push(entry);
         }
 
-        (table, prefix)
+        table
     }
 
     fn create_preprocessing_tables(
         &mut self,
         running: &Arc<AtomicBool>
-    ) -> Vec<(Vec<(Vec<u8>, Vec<u8>)>, Vec<u8>)> {
+    ) -> Vec<Table> {
         let mut tables = Vec::new();
-        
-        for i in 1..=self.tables_num {
+
+        for i in 1..=self.stored_tables_number {
             if !running.load(Ordering::SeqCst) {
                 println!("[INFO] Table {} generation terminated", i);
                 break;
             }
             
-            tables.push(self.create_preprocessing_table(&running));
+            let table = self.create_preprocessing_table(&running);
+           
+            let filepath = table_filepath(i);
 
-            println!("Table {} created", i);
+            table.store_table(&filepath)
+                .expect("Failed to write table to disk");
+        }
+
+        for i in 1..=(self.tables_number - self.stored_tables_number) {
+            if !running.load(Ordering::SeqCst) {
+                println!("[INFO] Table {} generation terminated", i);
+                break;
+            }
+            
+            let table = self.create_preprocessing_table(&running);
+
+            tables.push(table);
         }
 
         tables
@@ -164,56 +249,54 @@ impl Hellman {
 
     fn try_find_value(
         &mut self,
-        hash: &Vec<u8>,
-        table: &Vec<(Vec<u8>, Vec<u8>)>,
-        prefix: &Vec<u8>,
-        value: &mut Vec<u8>,
+        table: &Table,
+        value_index: usize,
         iteration: u32
     ) -> Option<String> {
-        if let Some((found_first, _)) = table
+        if let Some(TableEntry { first_value, last_value: _ }) = table
             .iter()
-            .find(|(_, last)| *last == *value)
+            .find(|TableEntry { first_value: _, last_value }|
+                *last_value == self.values[value_index])
         {
+            let hash = self.values[0].clone();
+        
             let prefixless = self.calculate_last_value(
                 self.iteration_count - iteration,
-                found_first,
-                prefix
-            ).unwrap();
+                first_value,
+                &table.prefix
+            );
 
-            let preimage_bytes = self.redundancy_function(&prefixless, prefix)
-                .unwrap();
-            
-            let preimage: String = preimage_bytes
-                .iter()
-                .map(|byte| format!("{:02x}", byte))
-                .collect();
+            let preimage_bytes = self.redundancy_function(
+                &prefixless, 
+                &table.prefix
+            );
             
             let preimage_hash = &self.state.hash_message(
                 &preimage_bytes
             );
-            let truncated_preimage_hash = self.truncate_hash(&preimage_hash);
 
-            if *hash != truncated_preimage_hash {
+            if *hash != self.truncate_hash(&preimage_hash) {
                 return None;
             }
 
-            let found_messagehash = MessageHash::new(
-                &preimage,
-                preimage_hash.clone()
-            );
+            let preimage = bytes_to_string(&preimage_bytes);
 
             println!(
-                "[SUCCESS] Found preimage on iteration {}!\n{}\n{}\n",
+                "[SUCCESS] Found preimage on iteration {}!\n{}\n{:x}\t{}\n",
                 iteration,
                 self.state.messagehash(),
-                found_messagehash
+                preimage_hash,
+                preimage
             );
 
             return Some(preimage);
         }
         else {
-            *value = self.calculate_last_value(1, value, prefix)
-                .unwrap();
+            self.values[value_index] = self.calculate_last_value(
+                1, 
+                &self.values[value_index].clone(), 
+                &table.prefix
+            );
         } 
 
         None
@@ -227,46 +310,70 @@ impl HashAttack for Hellman {
             self.state.messagehash()
         );
         println!("[INFO] Generating preprocessing tables...");
-        
+       
+        if self.stored_tables_number != 0 {
+            // Remove previous tables.
+            let _ = fs::remove_dir_all(TABLES_DIRECTORY_PATH);
+            fs::create_dir(TABLES_DIRECTORY_PATH)
+                .expect("Failed to create table directory");
+        }
+
         let tables = self.create_preprocessing_tables(&running);
 
-        if tables.is_empty() {
-            return AttackResult::Failure;
-        }
-        
         println!("[INFO] Searching for a preimage...");
 
-        let messagehash = self.state.messagehash();
-        let hash = self.truncate_hash(messagehash.hash_value());
-        let mut values: Vec<Vec<u8>> = vec![
-            hash.clone(); self.tables_num as usize
-        ];
+        let mut iteration = 1;
 
-        let mut j = 1;
-
-        while j <= self.iteration_count {
+        while iteration <= self.iteration_count {
             if !running.load(Ordering::SeqCst) {
-                println!("[INFO] Attack terminated after {} iterations", j);
+                println!(
+                    "[INFO] Attack terminated after {} iterations",
+                    iteration
+                );
                 break;
             }
             
-            for (i, (table, prefix)) in tables.iter().enumerate() {
+            // TODO read and process multiple tables at once
+            for table_index in 1..=self.stored_tables_number {
+                let filepath = table_filepath(table_index);
+
+                let table = Table::read_table(&filepath)
+                    .expect("Failed to deserialize table");
+
                 if let Some(preimage) = self.try_find_value(
-                    &hash,
+                    &table,
+                    table_index - 1,
+                    iteration
+                ) {
+                    return AttackResult::Preimage(preimage);
+                }
+            } 
+
+            for (index, table) in tables.iter().enumerate() {
+                let value_index = index + self.stored_tables_number;
+                
+                if let Some(preimage) = self.try_find_value(
                     table,
-                    prefix,
-                    &mut values[i],
-                    j
+                    value_index,
+                    iteration
                 ) {
                     return AttackResult::Preimage(preimage);
                 }
             }
 
-            j += 1;
+            iteration += 1;
         }
 
-        println!("[FAILURE] Preimage was not found in {} iterations\n", j - 1);
-        
+        println!(
+            "[FAILURE] Preimage was not found in {} iterations\n",
+            iteration - 1
+        );
+       
+        if self.stored_tables_number != 0 {
+            fs::remove_dir_all(TABLES_DIRECTORY_PATH)
+                .expect("Failed to delete stored tables");
+        }
+
         AttackResult::Failure
     }
 }
