@@ -1,12 +1,13 @@
 use std::{
-    sync::{atomic::{AtomicBool, Ordering}, Arc},
-    time
+    fmt,
+    sync::{Arc, atomic::{AtomicBool, Ordering}}
 };
 
 use chrono::prelude::*;
 use ripemd::{Digest, Ripemd160};
 
 use crate::messagehash::{HashValue, MessageHash};
+
 use messagetransform::MessageTransform;
 
 
@@ -14,6 +15,116 @@ pub mod birthdays;
 pub mod bruteforce;
 pub mod hellman;
 pub mod messagetransform;
+
+
+enum AttackIteration {
+    Preimage(u64),
+    Birthdays(u64, u64),
+}
+
+impl From<u64> for AttackIteration {
+    fn from(iteration: u64) -> Self {
+        Self::Preimage(iteration)
+    }
+}
+
+impl From<usize> for AttackIteration {
+    fn from(iteration: usize) -> Self {
+        Self::Preimage(iteration as u64)
+    }
+}
+
+impl From<(u64, u64)> for AttackIteration {
+    fn from(birthdays_iteration: (u64, u64)) -> Self {
+        let (i, j) = birthdays_iteration;
+
+        Self::Birthdays(i, j)
+    }
+}
+
+impl fmt::Display for AttackIteration {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Preimage(i) => write!(f, "{}", i),
+            Self::Birthdays(i, j) => write!(f, "{}-{}", i, j)
+        }
+    }
+}
+
+
+// TODO finish attack log
+enum AttackLog<'a> {
+    Init(&'a MessageHash),
+    TableGenInit(usize),
+    Term(&'a str, AttackIteration),
+    Result(&'a AttackResult, AttackIteration),
+    PerTableResult(&'a AttackResult, &'a str, AttackIteration)
+}
+
+impl<'a> AttackLog<'a> {
+    fn log(&self) {
+        let utc: DateTime<Utc> = Utc::now();
+
+        match self {
+            Self::Init(messagehash) =>
+                println!(
+                    "{} INIT, Initial message and hash:\n{}\n",
+                    utc,
+                    messagehash
+                ),
+            Self::TableGenInit(tables_number) =>
+                println!("{} INIT, Table number: {}",
+                    Utc::now(),
+                    tables_number
+                ),
+            Self::Term(origin, iteration) =>
+                println!(
+                    "{} TERM, Origin: {}, Iteration: {}",
+                    utc,
+                    origin,
+                    iteration
+                ),
+            Self::Result(result, iteration) => match result {
+                AttackResult::Failure => println!(
+                        "{} FAILURE, Iteration: {}",
+                        utc,
+                        iteration
+                    ),
+                AttackResult::Preimage(preimage) => println!(
+                        "{} SUCCESS, Iteration: {}, Preimage:\n{}",
+                        utc,
+                        iteration,
+                        preimage
+                    ),
+                AttackResult::Collision(messagehash1, messagehash2) => println!(
+                        "{} SUCCESS, Iteration: {}, Collision:\n{}\n{}",
+                        utc,
+                        iteration,
+                        messagehash1,
+                        messagehash2
+                    )
+            },
+            Self::PerTableResult(result, filepath, iteration) => match result {
+                AttackResult::Failure => println!(
+                        "{} FAILURE, Table: {}, Iteration: {}",
+                        utc,
+                        filepath,
+                        iteration
+                    ),
+                AttackResult::Preimage(preimage) => println!(
+                        "{} SUCCESS, Table: {}, Iteration: {}, Preimage:\n{}",
+                        utc,
+                        filepath,
+                        iteration,
+                        preimage
+                    ),
+                _ => ()
+            },
+        }
+    }
+}
+
+ 
 
 
 pub trait HashAttack {
@@ -27,17 +138,7 @@ pub trait HashAttack {
             r.store(false, Ordering::SeqCst);
         }).expect("Error setting Ctrl-C handler");
 
-        let mut utc: DateTime<Utc> = Utc::now();
-        println!("[TIME] Attack began at {}", utc);
-        let now = time::Instant::now();
-
         let result = self.attack(running);
-
-        let elapsed_time = now.elapsed();
-
-        utc = Utc::now();
-        println!("[TIME] Attack finished at {}", utc);
-        println!("[TIME] Attack took {:.2?}", elapsed_time);
 
         result
     }
@@ -45,8 +146,8 @@ pub trait HashAttack {
 
 #[derive(Clone, Debug)]
 pub enum AttackResult {
-    Preimage(String),
-    Collision(String, String),
+    Preimage(MessageHash),
+    Collision(MessageHash, MessageHash),
     Failure,
 }
 
