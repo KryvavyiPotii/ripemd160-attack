@@ -4,7 +4,6 @@ use std::{
     sync::{atomic::{AtomicBool, Ordering}, Arc},
 };
 
-use chrono::prelude::*;
 use rand::prelude::*;
 use serde::{Serialize, Deserialize};
 
@@ -378,7 +377,10 @@ impl Hellman {
 
         for i in 1..=self.chain_number {
             if !running.load(Ordering::SeqCst) {
-                AttackLog::Term("Table generation", i.into()).log();
+                AttackLog::Term(
+                    "Hellman.create_preprocessing_table",
+                    i.into()
+                ).log();
                 break;
             }
             
@@ -419,7 +421,7 @@ impl Hellman {
 
         for i in 1..=self.tables_number.on_disk() {
             if !running.load(Ordering::SeqCst) {
-                AttackLog::Term("Generation", i.into()).log();
+                AttackLog::Term("Hellman.generate", i.into()).log();
                 return;
             }
             
@@ -452,8 +454,8 @@ impl Hellman {
 
             table.store_table(&filepath)
                 .expect("Failed to write table to disk");
-            
-            println!("{} SUCCESS, Filepath: {}", Utc::now(), filepath);
+           
+            AttackLog::TableGenSuccess(&filepath).log();
         }
     }
 
@@ -526,6 +528,7 @@ impl HashAttack for Hellman {
         ); 
         let mut points = vec![hash.clone(); filepaths.len()];
 
+        let mut total_iterations: u64 = 0;
         let mut iteration: u64 = 1;
         let mut result = AttackResult::Failure; 
         let memory_tables_number = self.tables_number.in_memory();
@@ -547,7 +550,7 @@ impl HashAttack for Hellman {
             // Process tables in memory.
             while iteration <= self.iteration_count {
                 if !running.load(Ordering::SeqCst) {
-                    AttackLog::Term("Attack", iteration.into()).log();
+                    AttackLog::Term("Hellman.attack", iteration.into()).log();
                     break;
                 }
 
@@ -569,8 +572,6 @@ impl HashAttack for Hellman {
 
                         return result;
                     }
-                    else {
-                    }
                 }     
                 
                 iteration += 1;
@@ -584,12 +585,13 @@ impl HashAttack for Hellman {
                 ).log();
             }
 
+            total_iterations += (iteration - 1) * tables.len() as u64;
             iteration = 1;
         }
      
         AttackLog::Result(
             &result,
-            (self.iteration_count * self.tables_number.on_disk() as u64).into()
+            total_iterations.into()
         ).log();
 
         result
