@@ -5,77 +5,32 @@ A simple CLI application that executes brute-force, birthdays and Hellman's atta
 ## Usage
 
 ```console
-$ ripemd160-attack --help
-Executes various attacks on RIPEMD160 hash.
+$ ripemd160-attack help
+Execute various attacks on RIPEMD-160 hash.
 
 Usage: ripemd160-attack [OPTIONS] [COMMAND]
 
 Commands:
-  bruteforce  Executes brute-force attack.
-  birthdays   Executes birthdays attack.
-  hellman     Executes Hellman's attack.
+  bruteforce  Execute brute-force attack
+  birthdays   Execute birthdays attack
+  hellman     Execute Hellman's attack or generates preprocessing table
   help        Print this message or the help of the given subcommand(s)
 
 Options:
   -m, --message <message>
-          Initial message to process. [default: "Some huge message"]
-  -t, --message-transform <message transform>
-          Type of message modification. [default: random_number] [possible values: random_number, number_in_sequence, mutate]
+          Message to process [default: "Some huge message"]
+      --tr <message transform>
+          Type of message transformation [default: random_number] [possible values: random_number, number_in_sequence, mutate]
   -s, --hash-size <hash size>
-          Size of the hash suffix in bytes that will be attacked.
+          Size of the hash suffix in bytes that will be attacked [default: 2]
   -p, --probability <success probability>
-          Expected success probability.
+          Expected success probability [default: 0.95]
       --verbose-tries <verbose tries>
-          Number of tries that will be outputted.
+          Number of tries that will be printed out [default: 30]
   -h, --help
           Print help
   -V, --version
           Print version
-```
-
-```console
-$ ripemd160-attack bruteforce --help
-Executes brute-force attack.
-
-Usage: ripemd160-attack bruteforce
-
-Options:
-  -h, --help  Print help
-```
-
-```console
-$ ripemd160-attack birthdays --help
-Executes birthdays attack.
-
-Usage: ripemd160-attack birthdays
-
-Options:
-  -h, --help  Print help
-```
-
-```console
-$ ripemd160-attack birthdays --help
-Executes birthdays attack.
-
-Usage: ripemd160-attack birthdays
-
-Options:
-  -h, --help  Print help
-```
-
-```console
-$ ripemd160-attack hellman --help
-Executes Hellman's attack.
-
-Usage: ripemd160-attack hellman [OPTIONS]
-
-Options:
-      --rsize <redundancy output size>               Redundancy function output size in bytes.
-      --tables <hellman table number>                Number of tables.
-      --stored-tables <hellman stored table number>  Number of tables written to disk.
-      --vars <hellman table variable number>         Number of table variables.
-      --iters <hellman table iteration count>        Number of table iterations.
-  -h, --help                                         Print help
 ```
 
 ## Extra
