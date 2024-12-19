@@ -117,8 +117,7 @@ fn is_right_path(
     if reduction_prefix_size_in_bytes != parsed_reduction_prefix_size {
         return false;
     }
-    // Allow using tables that have higher number of chains.
-    if chain_number > parsed_chain_number {
+    if chain_number != parsed_chain_number {
         return false;
     }
     if iteration_count != parsed_iteration_count {
