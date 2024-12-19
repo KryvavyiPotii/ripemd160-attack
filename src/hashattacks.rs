@@ -52,7 +52,6 @@ impl fmt::Display for AttackIteration {
 }
 
 
-// TODO finish attack log
 enum AttackLog<'a> {
     Info(&'a str),
     Init(&'a MessageHash),
@@ -140,8 +139,6 @@ impl<'a> AttackLog<'a> {
         }
     }
 }
-
- 
 
 
 pub trait HashAttack {
