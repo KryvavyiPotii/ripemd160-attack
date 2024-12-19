@@ -117,7 +117,8 @@ fn is_right_path(
     if reduction_prefix_size_in_bytes != parsed_reduction_prefix_size {
         return false;
     }
-    if chain_number != parsed_chain_number {
+    // Allow reading bigger tables.
+    if chain_number > parsed_chain_number {
         return false;
     }
     if iteration_count != parsed_iteration_count {
@@ -203,9 +204,9 @@ fn bytes_to_string(bytes: &Vec<u8>) -> String {
 
 
 #[derive(Debug, Deserialize, Serialize, Clone)]
-struct TableEntry(Vec<u8>, Vec<u8>);
+struct Chain(Vec<u8>, Vec<u8>);
 
-impl TableEntry { 
+impl Chain { 
     fn new(first_point: Vec<u8>, last_point: Vec<u8>) -> Self {
         Self(first_point, last_point)
     }
@@ -214,26 +215,31 @@ impl TableEntry {
 
 #[derive(Debug, Deserialize, Serialize)]
 struct Table {
-    entries: Vec<TableEntry>,
+    entries: Vec<Chain>,
     prefix: Vec<u8>
 }
 
 impl Table {
-    fn new(entries: Vec<TableEntry>, prefix: Vec<u8>) -> Self {
+    fn new(entries: Vec<Chain>, prefix: Vec<u8>) -> Self {
         Self { entries, prefix }
     }
 
-    fn from_file(filepath: &str) -> Result<Self, &'static str> {
+    fn from_file(
+        filepath: &str,
+        entries_number: usize
+    ) -> Result<Self, &'static str> {
         let json: String = fs::read_to_string(filepath)
             .expect("Failed to read file");
         
-        let table: Table = serde_json::from_str(&json)
+        let mut table: Table = serde_json::from_str(&json)
             .expect("Failed to deserialize");
+
+        table.entries.truncate(entries_number);
 
         Ok(table)
     }
 
-    fn push(&mut self, entry: TableEntry) {
+    fn push(&mut self, entry: Chain) {
         self.entries.push(entry);
     }
 
@@ -242,7 +248,7 @@ impl Table {
             .sort_by(|a, b| a.1.cmp(&b.1));
     }
 
-    fn search_by_last_point(&self, point: &Vec<u8>) -> Option<&TableEntry> {
+    fn search_by_last_point(&self, point: &Vec<u8>) -> Option<&Chain> {
         if let Ok(index) = self.entries
             .binary_search_by(|entry| entry.1.cmp(&point))
         {
@@ -392,7 +398,7 @@ impl Hellman {
                 &table.prefix
             );
 
-            let entry = TableEntry::new(first_point, last_point);
+            let entry = Chain::new(first_point, last_point);
 
             table.push(entry);
         }
@@ -465,7 +471,7 @@ impl Hellman {
         point: &mut Vec<u8>,
         iteration: u64
     ) -> Option<MessageHash> {
-        if let Some(TableEntry(first_point, _)) = table
+        if let Some(Chain(first_point, _)) = table
             .search_by_last_point(point)
         {
             let prefixless = self.calculate_last_point(
@@ -541,7 +547,7 @@ impl HashAttack for Hellman {
             // Read tables_number tables into memory.
             let tables: Vec<Table> = current_filepaths.clone()
                 .map(|path| 
-                    Table::from_file(path)
+                    Table::from_file(path, self.chain_number as usize)
                         .expect("Failed to deserialize table")
                 )
                 .collect();
