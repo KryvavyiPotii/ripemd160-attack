@@ -54,13 +54,7 @@ impl From<&[u8; HASH_SIZE_IN_BYTES]> for HashValue {
     fn from(hash_array: &[u8; HASH_SIZE_IN_BYTES]) -> Self {
         let hash: HashArray = GenericArray::clone_from_slice(hash_array);
 
-        HashValue { hash }
-    }
-}
-
-impl Into<[u8; HASH_SIZE_IN_BYTES]> for HashValue {
-    fn into(self) -> [u8; HASH_SIZE_IN_BYTES] {
-        self.hash.into()
+        Self { hash }
     }
 }
 
@@ -82,7 +76,7 @@ impl Index<RangeFull> for HashValue {
     type Output = [u8];
 
     fn index(&self, _index: RangeFull) -> &Self::Output {
-        &self.hash
+        &self.hash.as_slice()
     }
 }
 
