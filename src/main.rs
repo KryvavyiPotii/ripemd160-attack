@@ -1,6 +1,6 @@
 use std::process;
 
-use clap::{Command, Arg};
+use clap::{Arg, Command};
 
 use hashattacks::{*, messagetransform::*};
 
@@ -9,20 +9,23 @@ mod messagehash;
 
 
 const DEFAULT_MESSAGE: &str = "Some huge message";
-const DEFAULT_VERBOSE_TRIES_NUMBER: u64 = 30;
-const DEFAULT_SUCCESS_PROBABILITY: f32 = 0.95;
+const DEFAULT_VERBOSE_TRIES_NUMBER: &str = "30";
+const DEFAULT_SUCCESS_PROBABILITY: &str  = "0.95";
+const DEFAULT_HASH_SIZE_IN_BYTES: &str   = "2";
 
-const DEFAULT_HASH_SIZE_IN_BYTES: usize = 2;
-
-const DEFAULT_HELLMAN_REDUNDANCY_OUTPUT_SIZE_IN_BYTES: usize = 16;
-const DEFAULT_HELLMAN_TABLE_NUMBER: usize = 1;
-const DEFAULT_HELLMAN_STORED_TABLE_NUMBER: usize = 0;
-const DEFAULT_HELLMAN_VARIABLE_NUMBER: u32 = 1 << 14;
-const DEFAULT_HELLMAN_ITERATION_COUNT: u32 = 1 << 7;
+const DEFAULT_REDUCTION_OUTPUT_SIZE_IN_BYTES: &str = "16";
+const DEFAULT_TABLE_DIRECTORY: &str               = "tables";
+const DEFAULT_GENERATED_TABLE_NUMBER: &str         = "1";
+const DEFAULT_TABLE_NUMBER: &str                   = "1";
+const DEFAULT_PROC_MEMORY_TABLE_NUMBER: &str       = "1";
+const DEFAULT_CHAIN_NUMBER: &str                   = "16384";
+const DEFAULT_ITERATION_COUNT: &str                = "128";
 
 const ATTACK_BRUTEFORCE: &str = "bruteforce";
 const ATTACK_BIRTHDAYS: &str  = "birthdays";
 const ATTACK_HELLMAN: &str    = "hellman";
+const HELLMAN_GENERATE: &str  = "generate";
+const HELLMAN_EXECUTE: &str   = "execute";
 
 const TRANSFORM_RANDOM_NUMBER: &str      = "random_number";
 const TRANSFORM_NUMBER_IN_SEQUENCE: &str = "number_in_sequence";
@@ -31,92 +34,129 @@ const TRANSFORM_MUTATE: &str             = "mutate";
 
 fn main() {
     let matches = Command::new("ripemd160-attack")
-        .version("0.4.0")
-        .about("Executes various attacks on RIPEMD160 hash.")
+        .version("0.5.0")
+        .about("Execute various attacks on RIPEMD-160 hash.")
         .arg(
             Arg::new("message")
                 .short('m')
                 .long("message")
                 .default_value(DEFAULT_MESSAGE)
-                .help("Initial message to process.")
+                .help("Message to process")
         )
         .arg(
             Arg::new("message transform")
-                .short('t')
-                .long("message-transform")
+                .long("tr")
+                .default_value(TRANSFORM_RANDOM_NUMBER)
                 .value_parser([
                     TRANSFORM_RANDOM_NUMBER,
                     TRANSFORM_NUMBER_IN_SEQUENCE,
                     TRANSFORM_MUTATE
                 ])
-                .default_value("random_number")
-                .help("Type of message modification.")
+                .help("Type of message transformation")
         )
         .arg(
             Arg::new("hash size")
                 .short('s')
                 .long("hash-size")
+                .default_value(DEFAULT_HASH_SIZE_IN_BYTES)
                 .value_parser(clap::value_parser!(usize))
-                .help("Size of the hash suffix in bytes that will be attacked.")
+                .help("Size of the hash suffix in bytes that will be attacked")
         )
         .arg(
             Arg::new("success probability")
                 .short('p')
                 .long("probability")
+                .default_value(DEFAULT_SUCCESS_PROBABILITY)
                 .value_parser(clap::value_parser!(f32))
-                .help("Expected success probability.")
+                .help("Expected success probability")
         )
         .arg(
             Arg::new("verbose tries")
                 .long("verbose-tries")
+                .default_value(DEFAULT_VERBOSE_TRIES_NUMBER)
                 .value_parser(clap::value_parser!(u64))
-                .help("Number of tries that will be outputted.")
+                .help("Number of tries that will be printed out")
         )
         .subcommand(
             Command::new(ATTACK_BRUTEFORCE)
-                .about("Executes brute-force attack.")
+                .about("Execute brute-force attack")
         )
         .subcommand(
             Command::new(ATTACK_BIRTHDAYS)
-                .about("Executes birthdays attack.")
+                .about("Execute birthdays attack")
         )
         .subcommand(
             Command::new(ATTACK_HELLMAN)
-                .about("Executes Hellman's attack.")
+                .about(
+                    "Execute Hellman's attack or \
+                    generates preprocessing table"
+                )
                 .arg(
-                    Arg::new("redundancy output size")
+                    Arg::new("table directory")
+                        .short('o')
+                        .long("table-dir")
+                        .default_value(DEFAULT_TABLE_DIRECTORY)
+                        .help("Path to table directory")
+                )
+                .arg(
+                    Arg::new("reduction output size")
                         .long("rsize")
+                        .default_value(DEFAULT_REDUCTION_OUTPUT_SIZE_IN_BYTES)
                         .value_parser(clap::value_parser!(usize))
-                        .help("Redundancy function output size in bytes.")
+                        .help("Reduction function output size in bytes")
                 )
                 .arg(
-                    Arg::new("hellman table number")
-                        .long("tables")
-                        .value_parser(clap::value_parser!(usize))
-                        .help("Number of tables.")
+                    Arg::new("chain number")
+                        .long("chains")
+                        .default_value(DEFAULT_CHAIN_NUMBER)
+                        .value_parser(clap::value_parser!(u64))
+                        .help("Number of table chains")
                 )
                 .arg(
-                    Arg::new("hellman stored table number")
-                        .long("stored-tables")
-                        .value_parser(clap::value_parser!(usize))
-                        .help("Number of tables written to disk.")
-                )
-                .arg(
-                    Arg::new("hellman table variable number")
-                        .long("vars")
-                        .value_parser(clap::value_parser!(u32))
-                        .help("Number of table variables.")
-                )
-                .arg(
-                    Arg::new("hellman table iteration count")
+                    Arg::new("iteration count")
                         .long("iters")
-                        .value_parser(clap::value_parser!(u32))
-                        .help("Number of table iterations.")
+                        .default_value(DEFAULT_ITERATION_COUNT)
+                        .value_parser(clap::value_parser!(u64))
+                        .help("Number of table iterations")
+                )
+                .subcommand(
+                    Command::new(HELLMAN_GENERATE)
+                        .about("Generates preprocessing tables.")
+                        .arg(
+                            Arg::new("table number")
+                                .short('t')
+                                .long("tables")
+                                .default_value(DEFAULT_GENERATED_TABLE_NUMBER)
+                                .value_parser(clap::value_parser!(usize))
+                                .help("Number of tables to generate")
+                        )
+                )
+                .subcommand(
+                    Command::new(HELLMAN_EXECUTE)
+                        .about("Execute Hellman's attack.")
+                        .arg(
+                            Arg::new("table number")
+                                .short('t')
+                                .long("tables")
+                                .default_value(DEFAULT_TABLE_NUMBER)
+                                .value_parser(clap::value_parser!(usize))
+                                .help("Number of tables to process")
+                        )
+                        .arg(
+                            Arg::new("table in process memory number")
+                                .long("mem-tables")
+                                .default_value(DEFAULT_PROC_MEMORY_TABLE_NUMBER)
+                                .value_parser(clap::value_parser!(usize))
+                                .help("Number of tables in process memory")
+                        )
                 )
         )
         .get_matches();
 
-    let message = matches.get_one::<String>("message").unwrap();
+    // TODO improve error handling of parsing.
+    let message = matches
+        .get_one::<String>("message")
+        .unwrap();
 
     let message_transform = match matches
         .get_one::<String>("message transform")
@@ -137,70 +177,103 @@ fn main() {
 
     let hash_size = matches
         .get_one::<usize>("hash size")
-        .unwrap_or(&DEFAULT_HASH_SIZE_IN_BYTES);
+        .unwrap();
     
     let success_probability = matches
         .get_one::<f32>("success probability")
-        .unwrap_or(&DEFAULT_SUCCESS_PROBABILITY);
+        .unwrap();
     
     let verbose_tries = matches
         .get_one::<u64>("verbose tries")
-        .unwrap_or(&DEFAULT_VERBOSE_TRIES_NUMBER);
+        .unwrap();
 
     let initial_state = AttackState::new(
         message,
         message_transform,
     );
 
-    match matches.subcommand() {
-        Some((ATTACK_BIRTHDAYS, _)) => birthdays::Birthdays::build(
-                initial_state,
-                *hash_size,
-                *success_probability,
-                *verbose_tries
-            )
-                .expect("Failed to initiate the attack.")
-                .execute(),
-        Some((ATTACK_BRUTEFORCE, _)) => bruteforce::BruteForce::build(
-                initial_state,
-                *hash_size,
-                *success_probability,
-                *verbose_tries
-            )
-                .expect("Failed to initiate the attack.")
-                .execute(),
-        Some((ATTACK_HELLMAN, sub_m)) => {
-            let redundancy_output_size = sub_m
-                .get_one::<usize>("redundancy output size")
-                .unwrap_or(&DEFAULT_HELLMAN_REDUNDANCY_OUTPUT_SIZE_IN_BYTES);
-            let table_number = sub_m
-                .get_one::<usize>("hellman table number")
-                .unwrap_or(&DEFAULT_HELLMAN_TABLE_NUMBER);
-            let stored_table_number = sub_m
-                .get_one::<usize>("hellman stored table number")
-                .unwrap_or(&DEFAULT_HELLMAN_STORED_TABLE_NUMBER);
-            let variable_number = sub_m
-                .get_one::<u32>("hellman table variable number")
-                .unwrap_or(&DEFAULT_HELLMAN_VARIABLE_NUMBER);
-            let iteration_count = sub_m
-                .get_one::<u32>("hellman table iteration count")
-                .unwrap_or(&DEFAULT_HELLMAN_ITERATION_COUNT);
-     
+    let subcommand = matches.subcommand();
+
+    if let Some((ATTACK_BIRTHDAYS, _)) = subcommand {
+        birthdays::Birthdays::build(
+            initial_state,
+            *hash_size,
+            *success_probability,
+            *verbose_tries
+        )
+            .expect("Failed to initiate the attack.")
+            .execute();
+    }
+    else if let Some((ATTACK_BRUTEFORCE, _)) = subcommand {
+        bruteforce::BruteForce::build(
+            initial_state,
+            *hash_size,
+            *success_probability,
+            *verbose_tries
+        )
+            .expect("Failed to initiate the attack.")
+            .execute();
+    }
+    else if let Some((ATTACK_HELLMAN, hellman_matches)) = subcommand {
+        let directory_path = hellman_matches
+            .get_one::<String>("table directory")
+            .unwrap();
+        let reduction_output_size = hellman_matches
+            .get_one::<usize>("reduction output size")
+            .unwrap();
+        let chain_number = hellman_matches
+            .get_one::<u64>("chain number")
+            .unwrap();
+        let iteration_count = hellman_matches
+            .get_one::<u64>("iteration count")
+            .unwrap();
+
+        let hellman_subcommand = hellman_matches.subcommand();
+        
+        if let Some((HELLMAN_GENERATE, gen_matches)) = hellman_subcommand {        
+            let table_number = gen_matches
+                .get_one::<usize>("table number")
+                .unwrap();
+
             hellman::Hellman::build(
                 initial_state,
                 *hash_size,
-                *redundancy_output_size,
-                *table_number,
-                *stored_table_number,
-                *variable_number,
-                *iteration_count
+                *reduction_output_size,
+                (*table_number).into(),
+                *chain_number,
+                *iteration_count,
+                directory_path
+            )
+                .expect("Failed to generate preprocessing tables.")
+                .generate();
+        }
+        else if let Some((HELLMAN_EXECUTE, exec_matches)) = hellman_subcommand {
+            let table_number = exec_matches
+                .get_one::<usize>("table number")
+                .unwrap();
+            let mem_table_number = exec_matches
+                .get_one::<usize>("table in process memory number")
+                .unwrap();
+
+            hellman::Hellman::build(
+                initial_state,
+                *hash_size,
+                *reduction_output_size,
+                (*table_number, *mem_table_number).into(),
+                *chain_number,
+                *iteration_count,
+                directory_path
             )
                 .expect("Failed to initiate the attack.")
-                .execute()
-        },
-        _ => {
+                .execute();
+        }
+        else {
             println!("Invalid attack type.");
             process::exit(-1);
         }
-    }; 
+    }
+    else {
+        println!("Invalid attack type.");
+        process::exit(-1);
+    }
 }
