@@ -95,13 +95,13 @@ impl HashAttack for Birthdays {
 
         while i <= self.verbose_tries_number {
             if !running.load(Ordering::SeqCst) {
-                AttackLog::Term("Attack", i.into()).log();
+                AttackLog::Term("Birthdays.attack", i.into()).log();
                 return AttackResult::Failure;
             }
             
             let messagehash = self.state.update();
             
-            println!("{}\t{}", i, messagehash);        
+            AttackLog::Info(&format!("{}\t{}", i, messagehash)).log();        
             
             calculated_hashes.push(messagehash);
             
@@ -118,13 +118,11 @@ impl HashAttack for Birthdays {
             i += 1;
         }
 
-        println!("...\n");
-
         let tries_num = self.tries_from_probability();
         
         while i <= tries_num {
             if !running.load(Ordering::SeqCst) {
-                AttackLog::Term("Attack", i.into()).log();
+                AttackLog::Term("Birthdays.attack", i.into()).log();
                 return AttackResult::Failure;
             }
 
