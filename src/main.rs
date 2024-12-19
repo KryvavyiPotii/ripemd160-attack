@@ -14,7 +14,7 @@ const DEFAULT_SUCCESS_PROBABILITY: &str  = "0.95";
 const DEFAULT_HASH_SIZE_IN_BYTES: &str   = "2";
 
 const DEFAULT_REDUCTION_OUTPUT_SIZE_IN_BYTES: &str = "16";
-const DEFAULT_TABLE_DIRECTORY: &str               = "tables";
+const DEFAULT_TABLE_DIRECTORY: &str                = "tables";
 const DEFAULT_GENERATED_TABLE_NUMBER: &str         = "1";
 const DEFAULT_TABLE_NUMBER: &str                   = "1";
 const DEFAULT_PROC_MEMORY_TABLE_NUMBER: &str       = "1";
@@ -34,7 +34,7 @@ const TRANSFORM_MUTATE: &str             = "mutate";
 
 fn main() {
     let matches = Command::new("ripemd160-attack")
-        .version("0.5.1")
+        .version("0.5.2")
         .about("Execute various attacks on RIPEMD-160 hash.")
         .arg(
             Arg::new("message")
