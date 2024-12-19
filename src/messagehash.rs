@@ -64,6 +64,12 @@ impl fmt::LowerHex for HashValue {
     }
 }
 
+impl fmt::Display for HashValue {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{:x}", self.hash)
+    }
+}
+
 impl Index<usize> for HashValue {
     type Output = u8;
 
@@ -123,8 +129,8 @@ impl MessageHash {
         &self.hash
     }
 
-    pub fn message(&self) -> String {
-        self.message.clone()
+    pub fn message(&self) -> &String {
+        &self.message
     }
 
     pub fn collides_with(
@@ -144,6 +150,6 @@ impl MessageHash {
 
 impl fmt::Display for MessageHash {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{:x}\t{}", self.hash, self.message)
+        write!(f, "{} \"{}\"", self.hash, self.message)
     }
 }
