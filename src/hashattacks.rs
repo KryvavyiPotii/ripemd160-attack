@@ -54,8 +54,10 @@ impl fmt::Display for AttackIteration {
 
 // TODO finish attack log
 enum AttackLog<'a> {
+    Info(&'a str),
     Init(&'a MessageHash),
     TableGenInit(usize),
+    TableGenSuccess(&'a str),
     Term(&'a str, AttackIteration),
     Result(&'a AttackResult, AttackIteration),
     PerTableResult(&'a AttackResult, &'a str, AttackIteration)
@@ -66,16 +68,23 @@ impl<'a> AttackLog<'a> {
         let utc: DateTime<Utc> = Utc::now();
 
         match self {
+            Self::Info(info) => println!("{} INFO, {}", utc, info),
             Self::Init(messagehash) =>
                 println!(
-                    "{} INIT, Initial message and hash:\n{}\n",
+                    "{} INIT, Message: \"{}\", Hash: {}",
                     utc,
-                    messagehash
+                    messagehash.message(),
+                    messagehash.hash_value()
                 ),
             Self::TableGenInit(tables_number) =>
                 println!("{} INIT, Table number: {}",
                     Utc::now(),
                     tables_number
+                ),
+            Self::TableGenSuccess(table_path) =>
+                println!("{} SUCCESS, Filepath: {}",
+                    Utc::now(),
+                    table_path
                 ),
             Self::Term(origin, iteration) =>
                 println!(
@@ -91,17 +100,23 @@ impl<'a> AttackLog<'a> {
                         iteration
                     ),
                 AttackResult::Preimage(preimage) => println!(
-                        "{} SUCCESS, Iteration: {}, Preimage:\n{}",
+                        "{} SUCCESS, Iteration: {}, \
+                        Preimage: \"{}\", Preimage hash: {}",
                         utc,
                         iteration,
-                        preimage
+                        preimage.message(),
+                        preimage.hash_value()
                     ),
                 AttackResult::Collision(messagehash1, messagehash2) => println!(
-                        "{} SUCCESS, Iteration: {}, Collision:\n{}\n{}",
+                        "{} SUCCESS, Iteration: {}, \
+                        Message1: \"{}\", Hash1: {}, \
+                        Message2: \"{}\", Hash2: {}",
                         utc,
                         iteration,
-                        messagehash1,
-                        messagehash2
+                        messagehash1.message(),
+                        messagehash2.hash_value(),
+                        messagehash2.message(),
+                        messagehash2.hash_value()
                     )
             },
             Self::PerTableResult(result, filepath, iteration) => match result {
@@ -112,11 +127,13 @@ impl<'a> AttackLog<'a> {
                         iteration
                     ),
                 AttackResult::Preimage(preimage) => println!(
-                        "{} SUCCESS, Table: {}, Iteration: {}, Preimage:\n{}",
+                        "{} SUCCESS, Table: {}, Iteration: {}, \
+                        Preimage: \"{}\", Preimage hash: {}",
                         utc,
                         filepath,
                         iteration,
-                        preimage
+                        preimage.message(),
+                        preimage.hash_value()
                     ),
                 _ => ()
             },
