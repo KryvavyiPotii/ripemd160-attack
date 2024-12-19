@@ -2,7 +2,7 @@ use std::sync::{Arc, atomic::{AtomicBool, Ordering}};
 
 use crate::messagehash::HashValue;
 
-use super::{AttackResult, AttackState, HashAttack, MessageHash};
+use super::{AttackLog, AttackResult, AttackState, HashAttack, MessageHash};
 
 
 pub struct Birthdays {
@@ -33,12 +33,14 @@ impl Birthdays {
         )
     }
 
+    /*
     fn min_probability_from_tries(&self, tries: u64) -> f32 {
         let hash_size_in_bits = self.hash_size_in_bytes * 8; 
         let hash_count = 1 << hash_size_in_bits;
 
         1.0 + (-(tries.pow(2) as f32) / (2 * hash_count) as f32).exp()
     }
+    */
 
     fn tries_from_probability(&self) -> u64 {
         let hash_size_in_bits = self.hash_size_in_bytes * 8; 
@@ -54,7 +56,7 @@ impl Birthdays {
     fn find_collision(
         &self,
         hashes: &mut Vec<MessageHash>
-    ) -> Option<(MessageHash, MessageHash)> {
+    ) -> Option<(MessageHash, MessageHash, u64, u64)> {
         let i = hashes.len();
 
         if i <= 1 {
@@ -68,15 +70,12 @@ impl Birthdays {
                 messagehash2,
                 self.hash_size_in_bytes
             ) {
-                println!(
-                    "[SUCCESS] Found collision in iteration {}-{}!\n{}\n{}\n",
-                    i,
-                    j,
-                    messagehash1,
-                    messagehash2
-                );
-
-                return Some((messagehash1, messagehash2.clone()));
+                return Some((
+                        messagehash1,
+                        messagehash2.clone(),
+                        i as u64,
+                        j as u64
+                    ));
             }
         }
 
@@ -88,26 +87,32 @@ impl Birthdays {
 
 impl HashAttack for Birthdays {
     fn attack(&mut self, running: Arc<AtomicBool>) -> AttackResult {
-        println!("[INFO] Initialising birthday attack...\n{}\n",
-            self.state.messagehash()
-        );
-
-        println!("[INFO] Searching for a collision...");
+        AttackLog::Init(&self.state.messagehash()).log();
         
         let mut i = 1;
         let mut calculated_hashes = Vec::new();
+        let mut result = AttackResult::Failure;
 
-        while i <= self.verbose_tries_number && running.load(Ordering::SeqCst) {
+        while i <= self.verbose_tries_number {
+            if !running.load(Ordering::SeqCst) {
+                AttackLog::Term("Attack", i.into()).log();
+                return AttackResult::Failure;
+            }
+            
             let messagehash = self.state.update();
             
             println!("{}\t{}", i, messagehash);        
             
             calculated_hashes.push(messagehash);
             
-            if let Some((mh1, mh2)) = self.find_collision(
+            if let Some((mh1, mh2, i, j)) = self.find_collision(
                 &mut calculated_hashes
             ) {
-                return AttackResult::Collision(mh1.message(), mh2.message());
+                result = AttackResult::Collision(mh1, mh2); 
+                
+                AttackLog::Result(&result, (i, j).into()).log();
+
+                return result;
             }
             
             i += 1;
@@ -117,22 +122,31 @@ impl HashAttack for Birthdays {
 
         let tries_num = self.tries_from_probability();
         
-        while i <= tries_num && running.load(Ordering::SeqCst) {
+        while i <= tries_num {
+            if !running.load(Ordering::SeqCst) {
+                AttackLog::Term("Attack", i.into()).log();
+                return AttackResult::Failure;
+            }
+
             let messagehash = self.state.update();
 
             calculated_hashes.push(messagehash);
             
-            if let Some((mh1, mh2)) = self.find_collision(
+            if let Some((mh1, mh2, i, j)) = self.find_collision(
                 &mut calculated_hashes
             ) {
-                return AttackResult::Collision(mh1.message(), mh2.message());
+                result = AttackResult::Collision(mh1, mh2); 
+                
+                AttackLog::Result(&result, (i, j).into()).log();
+
+                return result;
             }
 
             i += 1;
         }
         
-        println!("[FAILURE] Collision was not found in {} iterations\n", i);
-
-        AttackResult::Failure
+        AttackLog::Result(&result, i.into()).log();
+        
+        result
     }
 }
