@@ -2,7 +2,7 @@ use std::sync::{Arc, atomic::{AtomicBool, Ordering}};
 
 use crate::messagehash::HashValue;
 
-use super::{AttackResult, AttackState, HashAttack};
+use super::{AttackLog, AttackResult, AttackState, HashAttack};
 
 
 pub struct BruteForce {
@@ -33,12 +33,14 @@ impl BruteForce {
         )
     }
 
+    /*
     fn min_probability_from_tries(&self, tries: u64) -> f32 {
         let hash_size_in_bits = self.hash_size_in_bytes * 8; 
         let hash_count = 1 << hash_size_in_bits;
 
         1.0 + (-(tries as f32) / hash_count as f32).exp()
     }
+    */
 
     fn tries_from_probability(&self) -> u64 {
         let hash_size_in_bits = self.hash_size_in_bytes * 8; 
@@ -53,15 +55,17 @@ impl HashAttack for BruteForce {
     fn attack(&mut self, running: Arc<AtomicBool>) -> AttackResult {
         let original_messagehash = self.state.messagehash();
 
-        println!(
-            "[INFO] Initialising brute-force attack...\n{}\n",
-            original_messagehash
-        );
-        println!("[INFO] Searching for a preimage...");
+        AttackLog::Init(&original_messagehash).log();
         
         let mut i: u64 = 1;
+        let mut result = AttackResult::Failure; 
 
-        while i <= self.verbose_tries_number && running.load(Ordering::SeqCst) {
+        while i <= self.verbose_tries_number {
+            if !running.load(Ordering::SeqCst) {
+                AttackLog::Term("Attack", i.into()).log();
+                return AttackResult::Failure;
+            }
+            
             let messagehash = self.state.update();
             
             println!("{}\t{}", i, messagehash);
@@ -70,14 +74,11 @@ impl HashAttack for BruteForce {
                 messagehash.hash_value(),
                 self.hash_size_in_bytes
             ) {
-                println!(
-                    "[SUCCESS] Found preimage on iteration {}!\n{}\n{}\n",
-                    i,
-                    original_messagehash,
-                    messagehash
-                );
+                result = AttackResult::Preimage(messagehash);
 
-                return AttackResult::Preimage(messagehash.message());
+                AttackLog::Result(&result, i.into()).log();
+
+                return result;
             }
 
             i += 1;
@@ -87,28 +88,30 @@ impl HashAttack for BruteForce {
 
         let tries_num = self.tries_from_probability();
 
-        while i <= tries_num && running.load(Ordering::SeqCst) {
+        while i <= tries_num {
+            if !running.load(Ordering::SeqCst) {
+                AttackLog::Term("Attack", i.into()).log();
+                return AttackResult::Failure;
+            }
+            
             let messagehash = self.state.update();
             
             if original_messagehash.hash_value().equal_to(
                 messagehash.hash_value(),
                 self.hash_size_in_bytes
             ) {
-                println!(
-                    "[SUCCESS] Found preimage on iteration {}!\n{}\n{}\n",
-                    i,
-                    original_messagehash,
-                    messagehash
-                );
+                result = AttackResult::Preimage(messagehash);
 
-                return AttackResult::Preimage(messagehash.message());
+                AttackLog::Result(&result, i.into()).log();
+
+                return result;
             }
 
             i += 1;
         }
 
-        println!("[FAILURE] Preimage was not found in {} iterations\n", i);
-
-        AttackResult::Failure
+        AttackLog::Result(&result, i.into()).log();
+        
+        result
     }
 }
