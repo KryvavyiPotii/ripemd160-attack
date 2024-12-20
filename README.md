@@ -32,11 +32,3 @@ Options:
   -V, --version
           Print version
 ```
-
-## Extra
-
-Python 3 script `to_table.py` is also added to the project for converting obtained data into a LaTeX or text table with 2 columns:
-1. Attack number (`att`)
-2. Iteration count (`iter`) - number of iterations during the attack
-
-It accepts path to directory with output files and the type of a table to create.
