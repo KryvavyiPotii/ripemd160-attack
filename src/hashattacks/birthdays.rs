@@ -86,17 +86,19 @@ impl Birthdays {
 }
 
 impl HashAttack for Birthdays {
-    fn attack(&mut self, running: Arc<AtomicBool>) -> AttackResult {
+    fn attack(
+        &mut self,
+        running: Arc<AtomicBool>
+    ) -> Result<AttackResult, &'static str> {
         AttackLog::Init(&self.state.messagehash()).log();
         
         let mut i = 1;
         let mut calculated_hashes = Vec::new();
-        let mut result = AttackResult::Failure;
 
         while i <= self.verbose_tries_number {
             if !running.load(Ordering::SeqCst) {
                 AttackLog::Term("Birthdays.attack", i.into()).log();
-                return AttackResult::Failure;
+                return Err("Attack terminated");
             }
             
             let messagehash = self.state.update();
@@ -108,11 +110,11 @@ impl HashAttack for Birthdays {
             if let Some((mh1, mh2, i, j)) = self.find_collision(
                 &mut calculated_hashes
             ) {
-                result = AttackResult::Collision(mh1, mh2); 
+                let result = AttackResult::Collision(mh1, mh2); 
                 
-                AttackLog::Result(&result, (i, j).into()).log();
+                AttackLog::Success(&result, (i, j).into()).log();
 
-                return result;
+                return Ok(result);
             }
             
             i += 1;
@@ -123,7 +125,7 @@ impl HashAttack for Birthdays {
         while i <= tries_num {
             if !running.load(Ordering::SeqCst) {
                 AttackLog::Term("Birthdays.attack", i.into()).log();
-                return AttackResult::Failure;
+                return Err("Attack terminated");
             }
 
             let messagehash = self.state.update();
@@ -133,18 +135,18 @@ impl HashAttack for Birthdays {
             if let Some((mh1, mh2, i, j)) = self.find_collision(
                 &mut calculated_hashes
             ) {
-                result = AttackResult::Collision(mh1, mh2); 
+                let result = AttackResult::Collision(mh1, mh2); 
                 
-                AttackLog::Result(&result, (i, j).into()).log();
+                AttackLog::Success(&result, (i, j).into()).log();
 
-                return result;
+                return Ok(result);
             }
 
             i += 1;
         }
         
-        AttackLog::Result(&result, i.into()).log();
+        AttackLog::Failure(i.into()).log();
         
-        result
+        Err("Attack failed")
     }
 }
