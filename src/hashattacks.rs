@@ -17,6 +17,27 @@ pub mod hellman;
 pub mod messagetransform;
 
 
+pub trait HashAttack {
+    fn attack(
+        &mut self,
+        running: Arc<AtomicBool>
+    ) -> Result<AttackResult, &'static str>;
+    
+    fn execute(&mut self) -> Result<AttackResult, &'static str> {
+        let running = Arc::new(AtomicBool::new(true));
+        let r = running.clone();
+
+        ctrlc_async::set_handler(move || {
+            r.store(false, Ordering::SeqCst);
+        }).expect("Error setting Ctrl-C handler");
+
+        let result = self.attack(running);
+
+        result
+    }
+}
+
+
 enum AttackIteration {
     Preimage(u64),
     Birthdays(u64, u64),
@@ -58,8 +79,10 @@ enum AttackLog<'a> {
     TableGenInit(usize),
     TableGenSuccess(&'a str),
     Term(&'a str, AttackIteration),
-    Result(&'a AttackResult, AttackIteration),
-    PerTableResult(&'a AttackResult, &'a str, AttackIteration)
+    Success(&'a AttackResult, AttackIteration),
+    Failure(AttackIteration),
+    TableSuccess(&'a AttackResult, &'a str, AttackIteration),
+    TableFailure(&'a str, AttackIteration)
 }
 
 impl<'a> AttackLog<'a> {
@@ -92,12 +115,7 @@ impl<'a> AttackLog<'a> {
                     origin,
                     iteration
                 ),
-            Self::Result(result, iteration) => match result {
-                AttackResult::Failure => println!(
-                        "{} FAILURE, Iteration: {}",
-                        utc,
-                        iteration
-                    ),
+            Self::Success(result, iteration) => match result {
                 AttackResult::Preimage(preimage) => println!(
                         "{} SUCCESS, Iteration: {}, \
                         Preimage: \"{}\", Preimage hash: {}",
@@ -118,13 +136,13 @@ impl<'a> AttackLog<'a> {
                         messagehash2.hash_value()
                     )
             },
-            Self::PerTableResult(result, filepath, iteration) => match result {
-                AttackResult::Failure => println!(
-                        "{} FAILURE, Table: {}, Iteration: {}",
-                        utc,
-                        filepath,
-                        iteration
-                    ),
+            Self::Failure(iteration) =>
+                println!(
+                    "{} FAILURE, Iteration: {}",
+                    utc,
+                    iteration
+                ),
+            Self::TableSuccess(result, filepath, iteration) => match result {
                 AttackResult::Preimage(preimage) => println!(
                         "{} SUCCESS, Table: {}, Iteration: {}, \
                         Preimage: \"{}\", Preimage hash: {}",
@@ -136,33 +154,22 @@ impl<'a> AttackLog<'a> {
                     ),
                 _ => ()
             },
+            Self::TableFailure(filepath, iteration) => 
+                println!(
+                    "{} FAILURE, Table: {}, Iteration: {}",
+                    utc,
+                    filepath,
+                    iteration
+                ),
         }
     }
 }
 
 
-pub trait HashAttack {
-    fn attack(&mut self, running: Arc<AtomicBool>) -> AttackResult;
-    
-    fn execute(&mut self) -> AttackResult {
-        let running = Arc::new(AtomicBool::new(true));
-        let r = running.clone();
-
-        ctrlc_async::set_handler(move || {
-            r.store(false, Ordering::SeqCst);
-        }).expect("Error setting Ctrl-C handler");
-
-        let result = self.attack(running);
-
-        result
-    }
-}
-
 #[derive(Clone, Debug)]
 pub enum AttackResult {
     Preimage(MessageHash),
     Collision(MessageHash, MessageHash),
-    Failure,
 }
 
 #[derive(Clone, Debug)]
