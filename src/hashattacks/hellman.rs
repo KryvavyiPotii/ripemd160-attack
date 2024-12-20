@@ -158,13 +158,14 @@ impl Table {
             chains_number
         };
         
-        if chains_number < parsed_chains_number as usize {
+        if chains_number > parsed_chains_number as usize {
             return Err("Table does not have enough chains");
         }
         
         let prefix_index = 6 + parsed_chains_number * chain_size_in_bytes;
         
         let chains: Vec<Chain> = (6..prefix_index)
+            .take(chains_number * chain_size_in_bytes)
             .step_by(chain_size_in_bytes)
             .map(|i| {
                 Chain::try_from(
@@ -174,10 +175,6 @@ impl Table {
                 ).expect("Failed to convert bytes to chain")
             })
             .collect();
-
-        if chains.len() != chains_number {
-            return Err("Failed to read all chains");
-        }
 
         let prefix = Vec::from(
             data
