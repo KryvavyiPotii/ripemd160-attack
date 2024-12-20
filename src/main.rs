@@ -1,6 +1,6 @@
 use std::process;
 
-use clap::{Arg, Command};
+use clap::{Arg, ArgAction, Command};
 
 use hashattacks::{*, messagetransform::*};
 
@@ -15,16 +15,18 @@ const DEFAULT_HASH_SIZE_IN_BYTES: &str   = "2";
 
 const DEFAULT_REDUCTION_OUTPUT_SIZE_IN_BYTES: &str = "16";
 const DEFAULT_TABLE_DIRECTORY: &str                = "tables";
+const DEFAULT_TABLE_FORMAT: &str                   = "bin";
 const DEFAULT_GENERATED_TABLE_NUMBER: &str         = "1";
 const DEFAULT_TABLE_NUMBER: &str                   = "1";
 const DEFAULT_PROC_MEMORY_TABLE_NUMBER: &str       = "1";
 const DEFAULT_CHAIN_NUMBER: &str                   = "16384";
-const DEFAULT_ITERATION_COUNT: &str                = "128";
+const DEFAULT_CHAIN_LENGTH: &str                   = "128";
 
 const ATTACK_BRUTEFORCE: &str = "bruteforce";
 const ATTACK_BIRTHDAYS: &str  = "birthdays";
 const ATTACK_HELLMAN: &str    = "hellman";
 const HELLMAN_GENERATE: &str  = "generate";
+const HELLMAN_CONVERT: &str   = "convert";
 const HELLMAN_EXECUTE: &str   = "execute";
 
 const TRANSFORM_RANDOM_NUMBER: &str      = "random_number";
@@ -34,7 +36,7 @@ const TRANSFORM_MUTATE: &str             = "mutate";
 
 fn main() {
     let matches = Command::new("ripemd160-attack")
-        .version("0.5.3")
+        .version("0.5.4")
         .about("Execute various attacks on RIPEMD-160 hash.")
         .arg(
             Arg::new("message")
@@ -93,10 +95,17 @@ fn main() {
                 )
                 .arg(
                     Arg::new("table directory")
-                        .short('o')
+                        .short('d')
                         .long("table-dir")
                         .default_value(DEFAULT_TABLE_DIRECTORY)
                         .help("Path to table directory")
+                )
+                .arg(
+                    Arg::new("table file format")
+                        .long("format")
+                        .default_value(DEFAULT_TABLE_FORMAT)
+                        .value_parser(["json", "bin"])
+                        .help("Table file format to read/write")
                 )
                 .arg(
                     Arg::new("reduction output size")
@@ -107,24 +116,23 @@ fn main() {
                 )
                 .arg(
                     Arg::new("chain number")
-                        .long("chains")
+                        .long("chain-num")
                         .default_value(DEFAULT_CHAIN_NUMBER)
                         .value_parser(clap::value_parser!(u64))
                         .help("Number of table chains")
                 )
                 .arg(
-                    Arg::new("iteration count")
-                        .long("iters")
-                        .default_value(DEFAULT_ITERATION_COUNT)
+                    Arg::new("chain length")
+                        .long("chain-len")
+                        .default_value(DEFAULT_CHAIN_LENGTH)
                         .value_parser(clap::value_parser!(u64))
-                        .help("Number of table iterations")
+                        .help("Length of table chains")
                 )
                 .subcommand(
                     Command::new(HELLMAN_GENERATE)
-                        .about("Generates preprocessing tables.")
+                        .about("Generate preprocessing tables")
                         .arg(
                             Arg::new("table number")
-                                .short('t')
                                 .long("tables")
                                 .default_value(DEFAULT_GENERATED_TABLE_NUMBER)
                                 .value_parser(clap::value_parser!(usize))
@@ -132,11 +140,38 @@ fn main() {
                         )
                 )
                 .subcommand(
+                    Command::new(HELLMAN_CONVERT)
+                        .about("Convert preprocessing tables into \
+                            different format")
+                        .arg(
+                            Arg::new("output format")
+                                .long("out-format")
+                                .default_value("json")
+                                .value_parser(["json", "bin"])
+                                .help("Format of output table file")
+                        )
+                        // TODO allow using arrays and ranges
+                        .arg(
+                            Arg::new("table index")
+                                .short('i')
+                                .long("index")
+                                .value_parser(clap::value_parser!(usize))
+                                .help("Index of table to convert \
+                                    (number after \'_\' in file name)")
+                        )
+                        .arg(
+                            Arg::new("overwrite table")
+                                .short('f')
+                                .long("force")
+                                .action(ArgAction::SetTrue)
+                                .help("Overwrite existing tables")
+                        )
+                )
+                .subcommand(
                     Command::new(HELLMAN_EXECUTE)
-                        .about("Execute Hellman's attack.")
+                        .about("Execute Hellman's attack")
                         .arg(
                             Arg::new("table number")
-                                .short('t')
                                 .long("tables")
                                 .default_value(DEFAULT_TABLE_NUMBER)
                                 .value_parser(clap::value_parser!(usize))
@@ -170,7 +205,7 @@ fn main() {
         TRANSFORM_MUTATE
             => MessageTransform::Mutate,
         _ => {
-            println!("Invalid message transform.");
+            eprintln!("Invalid message transform");
             process::exit(-1);
         }
     };
@@ -195,28 +230,31 @@ fn main() {
     let subcommand = matches.subcommand();
 
     if let Some((ATTACK_BIRTHDAYS, _)) = subcommand {
-        birthdays::Birthdays::build(
+        let _ = birthdays::Birthdays::build(
             initial_state,
             *hash_size,
             *success_probability,
             *verbose_tries
         )
-            .expect("Failed to initiate the attack.")
+            .expect("Failed to initialize struct")
             .execute();
     }
     else if let Some((ATTACK_BRUTEFORCE, _)) = subcommand {
-        bruteforce::BruteForce::build(
+        let _ = bruteforce::BruteForce::build(
             initial_state,
             *hash_size,
             *success_probability,
             *verbose_tries
         )
-            .expect("Failed to initiate the attack.")
+            .expect("Failed to initialize struct")
             .execute();
     }
     else if let Some((ATTACK_HELLMAN, hellman_matches)) = subcommand {
         let directory_path = hellman_matches
             .get_one::<String>("table directory")
+            .unwrap();
+        let file_format = hellman_matches
+            .get_one::<String>("table file format")
             .unwrap();
         let reduction_output_size = hellman_matches
             .get_one::<usize>("reduction output size")
@@ -224,8 +262,8 @@ fn main() {
         let chain_number = hellman_matches
             .get_one::<u64>("chain number")
             .unwrap();
-        let iteration_count = hellman_matches
-            .get_one::<u64>("iteration count")
+        let chain_length = hellman_matches
+            .get_one::<u64>("chain length")
             .unwrap();
 
         let hellman_subcommand = hellman_matches.subcommand();
@@ -235,17 +273,41 @@ fn main() {
                 .get_one::<usize>("table number")
                 .unwrap();
 
-            hellman::Hellman::build(
+            let _ = hellman::Hellman::build(
                 initial_state,
                 *hash_size,
                 *reduction_output_size,
                 (*table_number).into(),
                 *chain_number,
-                *iteration_count,
-                directory_path
+                *chain_length,
+                directory_path,
+                file_format
             )
-                .expect("Failed to generate preprocessing tables.")
+                .expect("Failed to initialize struct")
                 .generate();
+        }
+        else if let Some((HELLMAN_CONVERT, con_matches)) = hellman_subcommand {        
+            let output_format = con_matches
+                .get_one::<String>("output format")
+                .unwrap();
+            let table_index = con_matches
+                .get_one::<usize>("table index")
+                .unwrap();
+            let force = con_matches
+                .get_flag("overwrite table");
+
+            let _ = hellman::Hellman::build(
+                initial_state,
+                *hash_size,
+                *reduction_output_size,
+                1.into(),
+                *chain_number,
+                *chain_length,
+                directory_path,
+                file_format
+            )
+                .expect("Failed to initialize struct")
+                .convert(output_format, *table_index, force);
         }
         else if let Some((HELLMAN_EXECUTE, exec_matches)) = hellman_subcommand {
             let table_number = exec_matches
@@ -255,25 +317,26 @@ fn main() {
                 .get_one::<usize>("table in process memory number")
                 .unwrap();
 
-            hellman::Hellman::build(
+            let _ = hellman::Hellman::build(
                 initial_state,
                 *hash_size,
                 *reduction_output_size,
                 (*table_number, *mem_table_number).into(),
                 *chain_number,
-                *iteration_count,
-                directory_path
+                *chain_length,
+                directory_path,
+                file_format
             )
-                .expect("Failed to initiate the attack.")
+                .expect("Failed to initiate the attack")
                 .execute();
         }
         else {
-            println!("Invalid attack type.");
+            eprintln!("Invalid attack type");
             process::exit(-1);
         }
     }
     else {
-        println!("Invalid attack type.");
+        eprintln!("Invalid attack type");
         process::exit(-1);
     }
 }
