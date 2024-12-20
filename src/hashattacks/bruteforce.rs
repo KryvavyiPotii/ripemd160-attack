@@ -52,18 +52,20 @@ impl BruteForce {
 }
 
 impl HashAttack for BruteForce {
-    fn attack(&mut self, running: Arc<AtomicBool>) -> AttackResult {
+    fn attack(
+        &mut self,
+        running: Arc<AtomicBool>
+    ) -> Result<AttackResult, &'static str> {
         let original_messagehash = self.state.messagehash();
 
         AttackLog::Init(&original_messagehash).log();
         
-        let mut i: u64 = 1;
-        let mut result = AttackResult::Failure; 
+        let mut i: u64 = 1; 
 
         while i <= self.verbose_tries_number {
             if !running.load(Ordering::SeqCst) {
                 AttackLog::Term("BruteForce.attack", i.into()).log();
-                return AttackResult::Failure;
+                return Err("Attack terminated");
             }
             
             let messagehash = self.state.update();
@@ -74,11 +76,11 @@ impl HashAttack for BruteForce {
                 messagehash.hash_value(),
                 self.hash_size_in_bytes
             ) {
-                result = AttackResult::Preimage(messagehash);
+                let result = AttackResult::Preimage(messagehash);
 
-                AttackLog::Result(&result, i.into()).log();
+                AttackLog::Success(&result, i.into()).log();
 
-                return result;
+                return Ok(result);
             }
 
             i += 1;
@@ -89,7 +91,7 @@ impl HashAttack for BruteForce {
         while i <= tries_num {
             if !running.load(Ordering::SeqCst) {
                 AttackLog::Term("BruteForce.attack", i.into()).log();
-                return AttackResult::Failure;
+                return Err("Attack terminated");
             }
             
             let messagehash = self.state.update();
@@ -98,18 +100,18 @@ impl HashAttack for BruteForce {
                 messagehash.hash_value(),
                 self.hash_size_in_bytes
             ) {
-                result = AttackResult::Preimage(messagehash);
+                let result = AttackResult::Preimage(messagehash);
 
-                AttackLog::Result(&result, i.into()).log();
+                AttackLog::Success(&result, i.into()).log();
 
-                return result;
+                return Ok(result);
             }
 
             i += 1;
         }
 
-        AttackLog::Result(&result, i.into()).log();
+        AttackLog::Failure(i.into()).log();
         
-        result
+        Err("Attack failed")
     }
 }
