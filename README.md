@@ -32,3 +32,66 @@ Options:
   -V, --version
           Print version
 ```
+
+```console
+$ ripemd160-attack hellman help
+Execute Hellman's attack or generates preprocessing table
+
+Usage: ripemd160-attack hellman [OPTIONS] [COMMAND]
+
+Commands:
+  generate  Generate preprocessing tables
+  convert   Convert preprocessing tables into different format
+  execute   Execute Hellman's attack
+  help      Print this message or the help of the given subcommand(s)
+
+Options:
+  -d, --table-dir <table directory>    Path to table directory [default: tables]
+      --rsize <reduction output size>  Reduction function output size in bytes [default: 16]
+      --chain-num <chain number>       Number of table chains [default: 16384]
+      --chain-len <chain length>       Length of table chains [default: 128]
+  -h, --help                           Print help
+```
+
+```console
+$ ripemd160-attack hellman execute --help
+Execute Hellman's attack
+
+Usage: ripemd160-attack hellman execute [OPTIONS]
+
+Options:
+      --format <table file format>
+          Table file format to read/write [default: bin] [possible values: json, bin]
+      --tables <table number>
+          Number of tables to process [default: 1]
+      --mem-tables <table in process memory number>
+          Number of tables in process memory [default: 1]
+  -h, --help
+          Print help
+```
+
+```console
+$ ripemd160-attack hellman generate --help
+Generate preprocessing tables
+
+Usage: ripemd160-attack hellman generate [OPTIONS]
+
+Options:
+      --format <table file format>  Table file format to read/write [default: bin] [possible values: json, bin]
+      --tables <table number>       Number of tables to generate [default: 1]
+  -h, --help                        Print help
+```
+
+```console
+$ ripemd160-attack hellman convert --help
+Convert preprocessing tables into different format
+
+Usage: ripemd160-attack hellman convert [OPTIONS]
+
+Options:
+      --if <input format>    Format of input table file [possible values: json, bin]
+      --of <output format>   Format of output table file [possible values: json, bin]
+  -i, --index <table index>  Index of table to convert (number after '_' in file name)
+  -f, --force                Overwrite existing tables that have the same index
+  -h, --help                 Print help
+```
