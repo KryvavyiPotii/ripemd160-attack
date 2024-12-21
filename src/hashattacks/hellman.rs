@@ -96,7 +96,6 @@ impl Table {
         Self { chains, prefix }
     }
 
-    // TODO converter from json to bin and vice versa
     fn from_file(
         filepath: &str,
         format: &str,
@@ -668,6 +667,11 @@ impl HashAttack for Hellman {
                             &result,
                             &filepaths[i + j],
                             iteration.into()
+                        ).log();
+                        AttackLog::Success(
+                            &result, 
+                            (total_iterations + iteration * tables.len() as u64 
+                                + j as u64).into()
                         ).log();
 
                         return Ok(result);
