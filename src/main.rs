@@ -101,13 +101,6 @@ fn main() {
                         .help("Path to table directory")
                 )
                 .arg(
-                    Arg::new("table file format")
-                        .long("format")
-                        .default_value(DEFAULT_TABLE_FORMAT)
-                        .value_parser(["json", "bin"])
-                        .help("Table file format to read/write")
-                )
-                .arg(
                     Arg::new("reduction output size")
                         .long("rsize")
                         .default_value(DEFAULT_REDUCTION_OUTPUT_SIZE_IN_BYTES)
@@ -132,6 +125,13 @@ fn main() {
                     Command::new(HELLMAN_GENERATE)
                         .about("Generate preprocessing tables")
                         .arg(
+                            Arg::new("table file format")
+                                .long("format")
+                                .default_value(DEFAULT_TABLE_FORMAT)
+                                .value_parser(["json", "bin"])
+                                .help("Table file format to read/write")
+                        )
+                        .arg(
                             Arg::new("table number")
                                 .long("tables")
                                 .default_value(DEFAULT_GENERATED_TABLE_NUMBER)
@@ -144,9 +144,14 @@ fn main() {
                         .about("Convert preprocessing tables into \
                             different format")
                         .arg(
+                            Arg::new("input format")
+                                .long("if")
+                                .value_parser(["json", "bin"])
+                                .help("Format of input table file")
+                        )
+                        .arg(
                             Arg::new("output format")
-                                .long("out-format")
-                                .default_value("json")
+                                .long("of")
                                 .value_parser(["json", "bin"])
                                 .help("Format of output table file")
                         )
@@ -164,12 +169,20 @@ fn main() {
                                 .short('f')
                                 .long("force")
                                 .action(ArgAction::SetTrue)
-                                .help("Overwrite existing tables")
+                                .help("Overwrite existing tables \
+                                    that have the same index")
                         )
                 )
                 .subcommand(
                     Command::new(HELLMAN_EXECUTE)
                         .about("Execute Hellman's attack")
+                        .arg(
+                            Arg::new("table file format")
+                                .long("format")
+                                .default_value(DEFAULT_TABLE_FORMAT)
+                                .value_parser(["json", "bin"])
+                                .help("Table file format to read/write")
+                        )
                         .arg(
                             Arg::new("table number")
                                 .long("tables")
@@ -253,9 +266,6 @@ fn main() {
         let directory_path = hellman_matches
             .get_one::<String>("table directory")
             .unwrap();
-        let file_format = hellman_matches
-            .get_one::<String>("table file format")
-            .unwrap();
         let reduction_output_size = hellman_matches
             .get_one::<usize>("reduction output size")
             .unwrap();
@@ -269,6 +279,9 @@ fn main() {
         let hellman_subcommand = hellman_matches.subcommand();
         
         if let Some((HELLMAN_GENERATE, gen_matches)) = hellman_subcommand {        
+            let file_format = gen_matches
+                .get_one::<String>("table file format")
+                .unwrap();
             let table_number = gen_matches
                 .get_one::<usize>("table number")
                 .unwrap();
@@ -287,6 +300,9 @@ fn main() {
                 .generate();
         }
         else if let Some((HELLMAN_CONVERT, con_matches)) = hellman_subcommand {        
+            let input_format = con_matches
+                .get_one::<String>("input format")
+                .unwrap();
             let output_format = con_matches
                 .get_one::<String>("output format")
                 .unwrap();
@@ -304,12 +320,15 @@ fn main() {
                 *chain_number,
                 *chain_length,
                 directory_path,
-                file_format
+                input_format
             )
                 .expect("Failed to initialize struct")
                 .convert(output_format, *table_index, force);
         }
         else if let Some((HELLMAN_EXECUTE, exec_matches)) = hellman_subcommand {
+            let file_format = exec_matches
+                .get_one::<String>("table file format")
+                .unwrap();
             let table_number = exec_matches
                 .get_one::<usize>("table number")
                 .unwrap();
