@@ -514,7 +514,7 @@ dependencies = [
 
 [[package]]
 name = "ripemd160-attack"
-version = "0.5.7"
+version = "0.6.0"
 dependencies = [
  "chrono",
  "clap",
