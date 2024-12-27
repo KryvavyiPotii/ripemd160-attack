@@ -108,22 +108,22 @@ impl Hellman {
         )
     }
     
-    fn calculate_last_point(
+    fn calculate_end_point(
         &mut self,
         chain_length: u64,
-        first_point: &Vec<u8>,
+        start_point: &Vec<u8>,
         prefix: &Vec<u8>
     ) -> Vec<u8> {
-        let mut last_point = first_point.clone();
+        let mut end_point = start_point.clone();
 
         for _ in 1..=chain_length {
-            let reducted_value = reduction_function(&last_point, prefix);
+            let reducted_value = reduction_function(&end_point, prefix);
             let hash = &self.state.hash_message(&reducted_value);
 
-            last_point = truncate_hash(&hash, self.hash_size_in_bytes);
+            end_point = truncate_hash(&hash, self.hash_size_in_bytes);
         }
 
-        last_point
+        end_point
     }
 
     fn create_preprocessing_table(
@@ -144,18 +144,18 @@ impl Hellman {
                 break;
             }
             
-            let first_point = generate_random_byte_vector(
+            let start_point = generate_random_byte_vector(
                 self.hash_size_in_bytes
             );
-            let last_point = self.calculate_last_point(
+            let end_point = self.calculate_end_point(
                 self.chain_length,
-                &first_point, 
+                &start_point, 
                 table.prefix()
             );
 
-            let entry = Chain::new(first_point, last_point);
+            let chain = Chain::new(start_point, end_point);
 
-            table.push(entry);
+            table.add_chain(chain);
         }
 
         table
@@ -203,14 +203,10 @@ impl Hellman {
                 return Ok(());
             }
             
-            let mut table = self.create_preprocessing_table(&running);
+            let table = self.create_preprocessing_table(&running);
           
-            // Sort the table by last points for future binary search.
-            table.sort();
-
             j = self.get_free_index(j);
             let filepath = self.table_filepath(j);
-
             table.to_file(&filepath, &self.table_file_format)?;
            
             info!("SUCCESS, Filepath: {}", filepath.display());
@@ -348,20 +344,23 @@ impl Hellman {
         point: &mut Vec<u8>,
         iteration: u64
     ) -> Option<MessageHash> {
-        if let Some(Chain(first_point, _)) = table
-            .search_by_last_point(point)
+        if let Ok(index) = table.search_chain_by_end_point(point)
         {
+            // unwrap() is used because Table::search_chain_by_end_point ensures
+            // that the element at index index is present.
+            let start_point = &table.get(index).unwrap().0;
+
             let result = self.try_find_preimage(
                 hash,
                 table,
-                first_point,
+                start_point,
                 iteration
             );
 
             return result;
         }
         else {
-            *point = self.calculate_last_point(
+            *point = self.calculate_end_point(
                 1, 
                 &point.clone(), 
                 table.prefix()
@@ -375,12 +374,12 @@ impl Hellman {
         &mut self,
         hash: &Vec<u8>,
         table: &Table,
-        first_point: &Vec<u8>,
+        start_point: &Vec<u8>,
         iteration: u64
     ) -> Option<MessageHash> {
-        let prefixless = self.calculate_last_point(
+        let prefixless = self.calculate_end_point(
             self.chain_length - iteration,
-            first_point,
+            start_point,
             table.prefix()
         );
 

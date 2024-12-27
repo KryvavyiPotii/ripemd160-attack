@@ -11,8 +11,8 @@ use serde::{Serialize, Deserialize};
 pub struct Chain(pub Vec<u8>, pub Vec<u8>);
 
 impl Chain { 
-    pub fn new(first_point: Vec<u8>, last_point: Vec<u8>) -> Self {
-        Self(first_point, last_point)
+    pub fn new(start_point: Vec<u8>, end_point: Vec<u8>) -> Self {
+        Self(start_point, end_point)
     }
 }
 
@@ -27,18 +27,18 @@ impl TryFrom<&[u8]> for Chain {
         
         let point_size_in_bytes = bytes.len() / 2;
         
-        let first_point = Vec::from(
+        let start_point = Vec::from(
             bytes
                 .get(..point_size_in_bytes)
-                .expect("Failed to parse first chain point")
+                .expect("Failed to parse starting point")
         );
-        let last_point = Vec::from(
+        let end_point = Vec::from(
             bytes
                 .get(point_size_in_bytes..)
-                .expect("Failed to parse last chain point")
+                .expect("Failed to parse end point")
         );
 
-        let chain = Self::new(first_point, last_point);
+        let chain = Self::new(start_point, end_point);
 
         Ok(chain)
     }
@@ -53,11 +53,21 @@ pub struct Table {
 
 impl Table {
     pub fn new(chains: Vec<Chain>, prefix: Vec<u8>) -> Self {
-        Self { chains, prefix }
+        let mut table = Self { chains, prefix };
+
+        // Sort chains by
+        table.chains
+            .sort_by(|a, b| a.1.cmp(&b.1));
+
+        table
     }
 
     pub fn prefix(&self) -> &Vec<u8> {
         &self.prefix
+    }
+
+    pub fn get(&self, index: usize) -> Option<&Chain> {
+        self.chains.get(index)
     }
 
     // TODO add support for reading files of different formats and 
@@ -162,10 +172,11 @@ impl Table {
         let prefix = Vec::from(
             data
                 .get(prefix_index..)
-                .expect("Failed to parse first chain point")
+                .expect("Failed to parse reduction function prefix")
         );
 
-        let table = Self::new(chains, prefix);
+        // We expect that the chains are sorted.
+        let table = Self { chains, prefix };
 
         Ok(table)
     }
@@ -224,9 +235,9 @@ impl Table {
 
         for chain in &self.chains {
             file.write_all(&chain.0)
-                .expect("Failed to write first chain point");
+                .expect("Failed to write starting point");
             file.write_all(&chain.1)
-                .expect("Failed to write last chain point");
+                .expect("Failed to write end point");
         }
 
         file.write_all(&self.prefix)
@@ -235,24 +246,21 @@ impl Table {
         Ok(())
     }
 
-    pub fn push(&mut self, entry: Chain) {
-        self.chains.push(entry);
+    // This method inserts a new chain into the table without 
+    // breaking the order.
+    pub fn add_chain(&mut self, chain: Chain) {
+        match self.search_chain_by_end_point(&chain.1) {
+            Ok(_) => {} 
+            Err(index) => self.chains.insert(index, chain),
+        }
     }
 
-    pub fn sort(&mut self) {
+    pub fn search_chain_by_end_point(
+        &self, 
+        end_point: &Vec<u8>
+    ) -> Result<usize, usize> {
         self.chains
-            .sort_by(|a, b| a.1.cmp(&b.1));
-    }
-
-    pub fn search_by_last_point(&self, point: &Vec<u8>) -> Option<&Chain> {
-        if let Ok(index) = self.chains
-            .binary_search_by(|entry| entry.1.cmp(&point))
-        {
-            Some(&self.chains[index])
-        }
-        else {
-            None
-        }
+            .binary_search_by(|chain| chain.1.cmp(end_point))
     }
 }
 

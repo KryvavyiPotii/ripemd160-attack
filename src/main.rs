@@ -55,7 +55,7 @@ fn main() {
         .init();
 
     let matches = Command::new("ripemd160-attack")
-        .version("0.5.7")
+        .version("0.6.1")
         .about("Execute various attacks on RIPEMD-160 hash.")
         .arg_required_else_help(true)
         .arg(
