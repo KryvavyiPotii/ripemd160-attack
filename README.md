@@ -11,8 +11,8 @@ Execute various attacks on RIPEMD-160 hash.
 Usage: ripemd160-attack [OPTIONS] [COMMAND]
 
 Commands:
-  bruteforce  Execute brute-force attack
   birthdays   Execute birthdays attack
+  bruteforce  Execute brute-force attack
   hellman     Execute Hellman's attack or generates preprocessing table
   help        Print this message or the help of the given subcommand(s)
 
@@ -29,8 +29,6 @@ Options:
           Size of the hash suffix in bytes that will be attacked [default: 2]
   -p, --probability <success probability>
           Expected success probability [default: 0.95]
-      --verbose-tries <verbose tries>
-          Number of tries that will be printed out [default: 30]
   -h, --help
           Print help
   -V, --version
@@ -38,23 +36,28 @@ Options:
 ```
 
 ```console
-$ ripemd160-attack bruteforce --help
-Execute brute-force attack
-
-Usage: ripemd160-attack bruteforce
-
-Options:
-  -h, --help  Print help
-```
-
-```console
 $ ripemd160-attack birthdays --help
 Execute birthdays attack
 
-Usage: ripemd160-attack birthdays
+Usage: ripemd160-attack birthdays [OPTIONS]
 
 Options:
-  -h, --help  Print help
+  -t, --threads <thread count>         Number of threads to run in parallel [default: 1]
+  -v, --verbose-tries <verbose tries>  Number of tries that will be printed out [default: 0]
+  -i, --max-iters <max iterations>     Maximum number of iterations [default: 0]
+  -h, --help                           Print help
+```
+
+```console
+$ ripemd160-attack bruteforce --help
+Execute brute-force attack
+
+Usage: ripemd160-attack bruteforce [OPTIONS]
+
+Options:
+  -t, --threads <thread count>         Number of threads to run in parallel [default: 1]
+  -v, --verbose-tries <verbose tries>  Number of tries that will be printed out [default: 0]
+  -h, --help                           Print help
 ```
 
 ```console
