@@ -12,8 +12,10 @@ mod messagehash;
 
 
 const DEFAULT_ATTACK_COUNT: &str         = "1";
+const DEFAULT_THREAD_COUNT: &str         = "1";
 const DEFAULT_MESSAGE: &str              = "Some huge message";
-const DEFAULT_VERBOSE_TRIES_NUMBER: &str = "30";
+const DEFAULT_VERBOSE_TRIES_NUMBER: &str = "0";
+const DEFAULT_MAX_ITER_NUMBER: &str      = "0"; // no limits
 const DEFAULT_SUCCESS_PROBABILITY: &str  = "0.95";
 const DEFAULT_HASH_SIZE_IN_BYTES: &str   = "2";
 
@@ -45,7 +47,7 @@ fn main() {
             writeln!(
                 buf,
                 "{} {} - {}", 
-                chrono::Local::now().format("%Y-%m-%d %H:%M:%S"),
+                chrono::Local::now().format("%Y-%m-%d %H:%M:%S%.3f"),
                 record.level(), 
                 record.args()
             )
@@ -55,7 +57,7 @@ fn main() {
         .init();
 
     let matches = Command::new("ripemd160-attack")
-        .version("0.6.1")
+        .version("0.7.0")
         .about("Execute various attacks on RIPEMD-160 hash.")
         .arg_required_else_help(true)
         .arg(
@@ -104,23 +106,56 @@ fn main() {
                 .short('p')
                 .long("probability")
                 .default_value(DEFAULT_SUCCESS_PROBABILITY)
-                .value_parser(clap::value_parser!(f32))
+                .value_parser(clap::value_parser!(f64))
                 .help("Expected success probability")
-        )
-        .arg(
-            Arg::new("verbose tries")
-                .long("verbose-tries")
-                .default_value(DEFAULT_VERBOSE_TRIES_NUMBER)
-                .value_parser(clap::value_parser!(u64))
-                .help("Number of tries that will be printed out")
-        )
-        .subcommand(
-            Command::new(ATTACK_BRUTEFORCE)
-                .about("Execute brute-force attack")
         )
         .subcommand(
             Command::new(ATTACK_BIRTHDAYS)
                 .about("Execute birthdays attack")
+                .arg(
+                    Arg::new("thread count")
+                        .short('t')
+                        .long("threads")
+                        .default_value(DEFAULT_THREAD_COUNT)
+                        .value_parser(clap::value_parser!(u64))
+                        .help("Number of threads to run in parallel")
+                )
+                .arg(
+                    Arg::new("verbose tries")
+                        .short('v')
+                        .long("verbose-tries")
+                        .default_value(DEFAULT_VERBOSE_TRIES_NUMBER)
+                        .value_parser(clap::value_parser!(u128))
+                        .help("Number of tries that will be printed out")
+                )
+                .arg(
+                    Arg::new("max iterations")
+                        .short('i')
+                        .long("max-iters")
+                        .default_value(DEFAULT_MAX_ITER_NUMBER)
+                        .value_parser(clap::value_parser!(u128))
+                        .help("Maximum number of iterations")
+                )
+        )
+        .subcommand(
+            Command::new(ATTACK_BRUTEFORCE)
+                .about("Execute brute-force attack")
+                .arg(
+                    Arg::new("thread count")
+                        .short('t')
+                        .long("threads")
+                        .default_value(DEFAULT_THREAD_COUNT)
+                        .value_parser(clap::value_parser!(u64))
+                        .help("Number of threads to run in parallel")
+                )
+                .arg(
+                    Arg::new("verbose tries")
+                        .short('v')
+                        .long("verbose-tries")
+                        .default_value(DEFAULT_VERBOSE_TRIES_NUMBER)
+                        .value_parser(clap::value_parser!(u128))
+                        .help("Number of tries that will be printed out")
+                )
         )
         .subcommand(
             Command::new(ATTACK_HELLMAN)
@@ -272,10 +307,7 @@ fn main() {
         .get_one::<usize>("hash size")
         .unwrap();
     let success_probability = matches
-        .get_one::<f32>("success probability")
-        .unwrap();
-    let verbose_tries = matches
-        .get_one::<u64>("verbose tries")
+        .get_one::<f64>("success probability")
         .unwrap();
 
     let initial_state = AttackState::new(
@@ -285,18 +317,37 @@ fn main() {
 
     let subcommand = matches.subcommand();
 
-    if let Some((ATTACK_BIRTHDAYS, _)) = subcommand {
+    if let Some((ATTACK_BIRTHDAYS, birthdays_matches)) = subcommand {
+        let thread_count = matches
+            .get_one::<u64>("thread count")
+            .unwrap();
+        let verbose_tries = birthdays_matches
+            .get_one::<u128>("verbose tries")
+            .unwrap();
+        let max_iters = birthdays_matches
+            .get_one::<u128>("max iterations")
+            .unwrap();
+        
         let _ = birthdays::Birthdays::build(
+            *thread_count,
             initial_state,
             *hash_size,
             *success_probability,
-            *verbose_tries
+            *verbose_tries,
+            *max_iters
         )
             .expect("Failed to initialize struct")
             .execute(*attack_count, transform_message);
-    }
-    else if let Some((ATTACK_BRUTEFORCE, _)) = subcommand {
+    } else if let Some((ATTACK_BRUTEFORCE, bruteforce_matches)) = subcommand {
+        let thread_count = matches
+            .get_one::<u64>("thread count")
+            .unwrap();
+        let verbose_tries = bruteforce_matches
+            .get_one::<u128>("verbose tries")
+            .unwrap();
+        
         let _ = bruteforce::BruteForce::build(
+            *thread_count,
             initial_state,
             *hash_size,
             *success_probability,
@@ -304,8 +355,7 @@ fn main() {
         )
             .expect("Failed to initialize struct")
             .execute(*attack_count, transform_message);
-    }
-    else if let Some((ATTACK_HELLMAN, hellman_matches)) = subcommand {
+    } else if let Some((ATTACK_HELLMAN, hellman_matches)) = subcommand {
         let directory_path = PathBuf::from(
             hellman_matches
                 .get_one::<String>("table directory")
@@ -343,8 +393,9 @@ fn main() {
             )
                 .expect("Failed to initialize struct")
                 .generate();
-        }
-        else if let Some((HELLMAN_CONVERT, con_matches)) = hellman_subcommand {        
+        } else if let Some(
+            (HELLMAN_CONVERT, con_matches)
+        ) = hellman_subcommand {        
             let input_format = con_matches
                 .get_one::<String>("input format")
                 .unwrap();
@@ -369,8 +420,9 @@ fn main() {
             )
                 .expect("Failed to initialize struct")
                 .convert(output_format, *table_index, force);
-        }
-        else if let Some((HELLMAN_EXECUTE, exec_matches)) = hellman_subcommand {
+        } else if let Some(
+            (HELLMAN_EXECUTE, exec_matches)
+        ) = hellman_subcommand {
             let file_format = exec_matches
                 .get_one::<String>("table file format")
                 .unwrap();

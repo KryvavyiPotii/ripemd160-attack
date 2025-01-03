@@ -1,12 +1,12 @@
 use rand::{thread_rng, Rng, seq::SliceRandom};
 
 
-fn append_number_to_message(message: &str, num: u64) -> String {
+fn append_number_to_message(message: &str, num: u128) -> String {
     format!("{message}{num}")
 }
 
 fn append_random_number_to_message(message: &str) -> String {
-    let maximum_number: u128 = 1 << 100;
+    let maximum_number: u128 = 1 << 127;
     let rand_num: u128 = thread_rng().gen_range(1..maximum_number);
 
     format!("{message}{rand_num}")
@@ -92,7 +92,7 @@ fn transform_message_randomly(message: &str) -> String {
 pub enum MessageTransform {
     AppendRandomNumber,
     Mutate,
-    AppendNumberInSequence(u64),
+    AppendNumberInSequence(u128),
 }
 
 impl MessageTransform {
@@ -102,10 +102,20 @@ impl MessageTransform {
                 append_random_number_to_message(message),
             Self::Mutate =>
                 transform_message_randomly(message),
-            Self::AppendNumberInSequence(ref mut num) => {
-                *num += 1;
-                append_number_to_message(message, *num - 1)
+            Self::AppendNumberInSequence(ref mut number) => {
+                *number += 1;
+                append_number_to_message(message, *number - 1)
             }
+        }
+    }
+
+    pub fn set_start_number(&mut self, number: u128) -> Result<(), ()>{
+        if let Self::AppendNumberInSequence(ref mut current_number) = self {
+            *current_number = number;
+
+            return Ok(());
+        } else {
+            return Err(());
         }
     }
 }

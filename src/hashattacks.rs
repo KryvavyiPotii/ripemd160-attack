@@ -17,16 +17,13 @@ pub mod messagetransform;
 pub trait HashAttack {
     fn initial_state(&self) -> &AttackState;
     fn initial_state_mut(&mut self) -> &mut AttackState;
-    fn attack(
-        &mut self, 
-        running: Arc<AtomicBool>
-    ) -> Result<AttackResult, &'static str>;
+    fn attack(&mut self, running: Arc<AtomicBool>) -> AttackResult;
 
     fn execute(
         &mut self, 
         attack_count: u64,
         transform_message: bool
-    ) -> Vec<Result<AttackResult, &'static str>> {
+    ) -> Vec<AttackResult> {
         let running = set_ctrlc_handler();
 
         let mut results = Vec::with_capacity(attack_count as usize);
@@ -73,10 +70,21 @@ fn set_ctrlc_handler() -> Arc<AtomicBool> {
 }
 
 
-#[derive(Clone, Debug)]
+#[derive(Debug)]
 pub enum AttackResult {
-    Preimage(MessageHash),
-    Collision(MessageHash, MessageHash),
+    GeneralFailure(&'static str),
+    PreimageFailure(MessageHash),
+    PreimageSuccess(MessageHash),
+    CollisionSuccess(MessageHash, MessageHash)
+}
+
+impl AttackResult {
+    pub fn is_success(&self) -> bool {
+        match self {
+            Self::PreimageSuccess(_) | Self::CollisionSuccess(_, _) => true,
+            _ => false
+        }
+    }
 }
 
 #[derive(Clone, Debug)]
@@ -102,6 +110,14 @@ impl AttackState {
 
     pub fn set_message(&mut self, message: &str) {
         self.message = message.to_string();
+    }
+
+    pub fn get_mut_message_transform(&mut self) -> &mut MessageTransform {
+        &mut self.message_transform
+    }
+    
+    pub fn get_message_transform(&self) -> &MessageTransform {
+        &self.message_transform
     }
 
     pub fn transform_message(&mut self, message: &str) -> String {

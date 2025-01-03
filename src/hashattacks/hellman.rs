@@ -71,13 +71,14 @@ impl Hellman {
         table_file_format: &str
     ) -> Result<Self, &'static str> {
         if hash_size_in_bytes > HashValue::len() {
-            return Err("Invalid hash size");
+            return Err("Provided hash size is too large");
         }
         if reduction_output_size_in_bytes <= hash_size_in_bytes {
-            return Err("Invalid reduction output size");
+            return Err("Reduction function output can not be smaller than \
+                hash value");
         }
         if tables_number.on_disk() == 0 {
-            return Err("Invalid number of tables");
+            return Err("Number of tables on disk can not be zero");
         }
         match table_file_format {
             "json" | "bin" => (),
@@ -94,18 +95,16 @@ impl Hellman {
         );
         let table_file_format = table_file_format.to_string(); 
 
-        Ok(
-            Self {
-                state: initial_state,
-                hash_size_in_bytes,
-                reduction_prefix_size_in_bytes,
-                tables_number,
-                chain_number,
-                chain_length,
-                table_directory,
-                table_file_format
-            }
-        )
+        Ok(Self {
+            state: initial_state,
+            hash_size_in_bytes,
+            reduction_prefix_size_in_bytes,
+            tables_number,
+            chain_number,
+            chain_length,
+            table_directory,
+            table_file_format
+        })
     }
     
     fn calculate_end_point(
@@ -293,17 +292,23 @@ impl Hellman {
         tables: &Vec<Table>,
         filepaths: &[PathBuf],
         running: &Arc<AtomicBool>
-    ) -> (Result<AttackResult, &'static str>, u64) {
+    ) -> (AttackResult, u64) {
         let mut iteration: u64 = 1;
 
         if points.len() != tables.len() || tables.len() != filepaths.len() {
-            return (Err("Invalid container sizes"), iteration);    
+            return (
+                AttackResult::GeneralFailure("Invalid container sizes"), 
+                iteration
+            );    
         }
 
         while iteration <= self.chain_length {
             if !running.load(Ordering::SeqCst) {
                 info!("TERM, Hellman.process_tables, Iteration: {}", iteration);
-                return (Err("Attack terminated"), iteration);
+
+                let result = AttackResult::GeneralFailure("Attack terminated");
+
+                return (result, iteration);
             }
 
             // TODO add multithreading
@@ -316,25 +321,27 @@ impl Hellman {
                 ) {
                     info!(
                         "SUCCESS, Table: {}, Iteration: {}, \
-                        Preimage: \"{}\", Preimage hash: {}",
+                        Preimage: {}, Preimage hash: {}",
                         filepaths[j].display(),
                         iteration,
                         preimage.message(),
                         preimage.hash_value()
                     );
                     
-                    let result = AttackResult::Preimage(preimage);
+                    let result = AttackResult::PreimageSuccess(preimage);
                    
                     let iteration = iteration * tables.len() as u64 + j as u64;
 
-                    return (Ok(result), iteration);
+                    return (result, iteration);
                 }
             }     
             
             iteration += 1;
         }
 
-        (Err("Failed to find preimage"), iteration)
+        let result = AttackResult::GeneralFailure("Failed to find preimage");
+        
+        (result, iteration)
     }
 
     fn try_find_point(
@@ -417,7 +424,7 @@ impl HashAttack for Hellman {
     fn attack(
         &mut self,
         running: Arc<AtomicBool>
-    ) -> Result<AttackResult, &'static str> {
+    ) -> AttackResult {
         info!(
             "INIT, Message: \"{}\", Hash: {}",
             self.state.messagehash().message(), 
@@ -449,16 +456,8 @@ impl HashAttack for Hellman {
                 &running
             ); 
 
-            if let Ok(AttackResult::Preimage(preimage)) = result {
-                info!(
-                    "SUCCESS, Iteration: {}, \
-                    Preimage: \"{}\", Preimage hash: {}",
-                    total_iterations + iteration,
-                    preimage.message(),
-                    preimage.hash_value()
-                );
-
-                return Ok(AttackResult::Preimage(preimage));
+            if let AttackResult::PreimageSuccess(preimage) = result {
+                return AttackResult::PreimageSuccess(preimage);
             }
 
             for filepath in current_filepaths {
@@ -474,6 +473,6 @@ impl HashAttack for Hellman {
      
         info!("FAILURE, Iteration: {}", total_iterations);
 
-        Err("Attack failed")
+        AttackResult::GeneralFailure("Attack failed")
     }
 }
